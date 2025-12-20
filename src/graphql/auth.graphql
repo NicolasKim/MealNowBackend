@@ -1,0 +1,41 @@
+
+# User type is defined in schema.graphql
+# type User {
+#   id: ID!
+#   phone: String
+#   email: String
+#   nickname: String
+#   gender: String
+#   region: String
+#   avatar: String
+#   language: String
+#   onboardingCompleted: Boolean
+#   tastePreferences: [String]
+#   savedRecipes: [Recipe]
+#   status: String
+# }
+
+type AuthResponse {
+  user: User
+  token: String
+}
+
+input UpdateProfileInput {
+  nickname: String
+  gender: String
+  region: String
+  avatar: String
+  language: String
+}
+
+type Mutation {
+  loginWithPassword(email: String!, password: String!): AuthResponse
+  registerWithEmail(email: String!, password: String!, code: String!): AuthResponse
+  loginWithThirdParty(platform: String!, token: String!, nickname: String): AuthResponse
+  sendVerificationCode(email: String!): Boolean
+  updateProfile(input: UpdateProfileInput!): User
+  logout: Boolean
+  registerDeviceToken(token: String!): Boolean
+  resetPassword(email: String!, password: String!, code: String!): Boolean
+  deactivateAccount: Boolean
+}

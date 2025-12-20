@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Override paths for Docker container (The .env.production has absolute Mac paths)
+      - APP_STORE_PRIVATE_KEY=resources/AuthKey_U856VG76WZ.p8
+      - APNS_KEY_PATH=resources/AuthKey_G8YKW27TF4.p8
+    env_file:
+      - .env.production
+    volumes:
+      - ./uploads:/app/uploads
+    # No depends_on because we use cloud services

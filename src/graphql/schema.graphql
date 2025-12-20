@@ -1,0 +1,247 @@
+scalar DateTime
+
+type UserSubscription {
+  plan: String!
+  status: String!
+  startAt: DateTime
+  endAt: DateTime
+  remainingTrials: Int!
+  appStoreSubscriptionId: String
+  autoRenew: Boolean
+}
+
+type User {
+  id: ID!
+  email: String
+  phone: String
+  wechatId: String
+  appleId: String
+  preferences: Preference
+  subscription: UserSubscription
+  pantry: [PantryItem!]!
+  usage: UsageStats
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  authId: String
+  onboardingCompleted: Boolean!
+  nickname: String
+  gender: String
+  region: String
+  avatar: String
+  language: String
+  timezone: String
+  tastePreferences: [String!]!
+  savedRecipes: [Recipe!]!
+}
+
+type TastePreferenceOption {
+  category: String!
+  label: String!
+  value: String!
+  icon: String
+}
+
+type Preference {
+  spicyLevel: Int!
+  dietaryRestrictions: [String!]!
+  dislikedIngredients: [String!]!
+  cookTimeMin: Int!
+  cookTimeMax: Int!
+}
+
+type PantryItem {
+  id: ID!
+  name: String!
+  quantity: Float!
+  unit: String!
+  category: String
+  expiryDate: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Recipe {
+  id: ID!
+  title: String!
+  imageUrl: String
+  cookTimeMinutes: Int!
+  difficulty: String!
+  matchRate: Int!
+  ingredients: [RecipeIngredient!]!
+  steps: [RecipeStep!]!
+  missing: [IngredientRequirement!]!
+  type: String
+  description: String
+  createdAt: DateTime
+}
+
+type RecipeIngredient {
+  name: String!
+  amount: Float!
+  unit: String!
+}
+
+type RecipeStep {
+  order: Int!
+  instruction: String!
+}
+
+type IngredientRequirement {
+  name: String!
+  requiredAmount: Float!
+  unit: String!
+  category: String
+}
+
+type ShoppingPlatform {
+  id: ID!
+  name: String!
+  code: String!
+  rating: Float
+}
+
+type PriceQuote {
+  platform: ShoppingPlatform!
+  price: Float!
+  currency: String!
+  unit: String!
+  quantity: Float!
+  minPurchase: Float
+  deliveryEtaMinutes: Int
+}
+
+type CartItem {
+  id: ID!
+  ingredientName: String!
+  quantity: Float!
+  unit: String!
+  platform: ShoppingPlatform!
+  price: Float!
+  currency: String!
+}
+
+type Cart {
+  id: ID!
+  userId: ID!
+  items: [CartItem!]!
+  totalPrice: Float!
+  currency: String!
+  status: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type TaskCompletionNotification {
+  userId: String!
+  taskId: String
+  type: String!
+  status: String!
+  data: JSON
+}
+
+scalar JSON
+
+type Subscription {
+  taskCompleted(userId: String): TaskCompletionNotification!
+}
+
+type UsageStats {
+  totalGenerations: Int!
+  totalRecognitions: Int!
+  lastActiveAt: DateTime
+}
+
+type UsageRecord {
+  id: ID!
+  userId: String!
+  type: String!
+  amount: Float!
+  description: String
+  relatedId: String
+  createdAt: DateTime!
+}
+
+type SubscriptionPlan {
+  id: String!
+  title: String!
+  price: Float!
+  currency: String!
+  interval: String
+  description: String
+  iapSku: String
+  isPopular: Boolean
+  isBestValue: Boolean
+  savings: String
+  pricePerUnit: String
+}
+
+input IngredientInput {
+  name: String!
+  quantity: Float!
+  unit: String!
+  category: String
+  expiryDate: DateTime
+}
+
+input PreferenceInput {
+  spicyLevel: Int!
+  dietaryRestrictions: [String!]!
+  dislikedIngredients: [String!]!
+  cookTimeMin: Int!
+  cookTimeMax: Int!
+}
+
+input GenerateRecipeInput {
+  ingredientNames: [String!]!
+  preference: PreferenceInput
+}
+
+type Query {
+  me: User
+  pantry: [PantryItem!]!
+  dailyRecommendations(mealType: String!): [Recipe!]!
+  recommendations(count: Int!): [Recipe!]!
+  priceCompare(requirements: [IngredientRequirementInput!]!): [PriceQuote!]!
+  cart: Cart
+  tastePreferenceOptions: [TastePreferenceOption!]!
+  usageHistory(limit: Int, offset: Int): [UsageRecord!]!
+  myRecipes(limit: Int, offset: Int): [Recipe!]!
+  subscriptionPlans: [SubscriptionPlan!]!
+  hello: String
+}
+
+input IngredientRequirementInput {
+  name: String!
+  requiredAmount: Float!
+  unit: String!
+  category: String
+}
+
+type TaskResponse {
+  taskId: String!
+  message: String
+}
+
+type Mutation {
+  loginWithSms(phone: String!, code: String!): String!
+  loginWithWeChat(code: String!): String!
+  loginWithApple(token: String!): String!
+
+  setPreferences(input: PreferenceInput!): Preference!
+
+  recognizeIngredients(imageUrl: String!): [PantryItem!]!
+  addIngredient(input: IngredientInput!): PantryItem!
+  updateIngredient(id: ID!, input: IngredientInput!): PantryItem!
+  removeIngredient(id: ID!): Boolean!
+
+  generateRecipes(input: GenerateRecipeInput!, count: Int!): TaskResponse!
+  generateSurpriseRecipes(count: Int!): TaskResponse!
+  addMissingToCart(recipeId: ID!): Cart!
+
+  verifyAppStoreReceipt(receiptData: String!): Boolean!
+  consumeTrial: Boolean!
+
+  completeOnboarding(tastePreferences: [String!]!): User!
+  addToFavorites(id: String!): Recipe!
+  deleteRecipe(id: ID!): Boolean!
+}  

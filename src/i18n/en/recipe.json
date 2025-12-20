@@ -1,0 +1,17 @@
+{
+  "errors": {
+    "quota_exceeded": "Daily quota exceeded",
+    "ai_service_unavailable": "AI service temporarily unavailable",
+    "recipe_not_found": "Recipe not found or expired"
+  },
+  "meal_types": {
+    "breakfast": "Breakfast",
+    "lunch": "Lunch",
+    "dinner": "Dinner"
+  },
+  "meal_styles": {
+    "breakfast": "Focus on nutritional awakening, high protein, low GI, rich in dietary fiber light meal combinations, avoid being too greasy, provide stable energy for the whole day.",
+    "lunch": "Key period for energy replenishment, flavors can be rich, recommend balanced combination of high-quality carbs and meat/protein, satisfy satiety and energy needs for afternoon work/study.",
+    "dinner": "Focus on easy digestion and nutritional repair, control oil and refined carb intake, more vegetables less oil/salt, reduce burden on stomach, promote night metabolism."
+  }
+}

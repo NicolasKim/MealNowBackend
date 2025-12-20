@@ -1,0 +1,10 @@
+{
+  "sender_name": "Verify",
+  "verification": {
+    "subject": "Your Verification Code",
+    "title": "Verification Code",
+    "message": "Your verification code is:",
+    "expiry": "It will expire in 5 minutes.",
+    "ignore": "If you didn't request this, please ignore this email."
+  }
+}

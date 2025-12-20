@@ -1,0 +1,24 @@
+{
+  "options": {
+    "spice_none": "Non-spicy",
+    "spice_mild": "Mild",
+    "spice_medium": "Medium",
+    "spice_hot": "Hot",
+    "no_beef": "No Beef",
+    "no_pork": "No Pork",
+    "vegetarian": "Vegetarian",
+    "vegan": "Vegan",
+    "gluten_free": "Gluten Free",
+    "nut_free": "Nut Free",
+    "no_seafood": "No Seafood",
+    "cuisine_sichuan": "Sichuan Cuisine",
+    "cuisine_cantonese": "Cantonese Cuisine",
+    "cuisine_japanese": "Japanese Cuisine",
+    "cuisine_western": "Western Cuisine",
+    "cuisine_korean": "Korean Cuisine",
+    "cuisine_thai": "Thai Cuisine"
+  },
+  "errors": {
+    "user_not_found": "User not found"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "daily_recommendation": {
+    "title": "New Recommendations Ready! 🍽️",
+    "body": "Your {mealType} recommendations including Today's Pick are ready for you."
+  },
+  "recipe_ready": {
+    "title": "Recipes Ready! 🍳",
+    "body": "Your AI-generated recipes are ready. Check them out!"
+  }
+}

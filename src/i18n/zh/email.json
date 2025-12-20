@@ -1,0 +1,10 @@
+{
+  "sender_name": "验证助手",
+  "verification": {
+    "subject": "您的验证码",
+    "title": "验证码",
+    "message": "您的验证码是：",
+    "expiry": "验证码将在5分钟后失效。",
+    "ignore": "如果您没有请求此验证码，请忽略此邮件。"
+  }
+}

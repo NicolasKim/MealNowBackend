@@ -1,0 +1,25 @@
+{
+  "common": {
+    "unit_month": "/mo"
+  },
+  "plans": {
+    "yearly": {
+      "title": "Yearly Plan",
+      "description": "Equivalent to {price}/mo",
+      "savings": "Save {percent}%"
+    },
+    "quarterly": {
+      "title": "Quarterly Plan",
+      "description": "{price}/mo"
+    },
+    "monthly": {
+      "title": "Monthly Plan",
+      "description": "Flexible"
+    }
+  },
+  "errors": {
+    "receipt_verification_failed": "Receipt verification failed",
+    "jws_verification_failed": "JWS verification failed: {message}",
+    "no_subscription_info": "No subscription information found in receipt"
+  }
+}

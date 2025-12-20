@@ -1,0 +1,24 @@
+{
+  "options": {
+    "spice_none": "不辣",
+    "spice_mild": "微辣",
+    "spice_medium": "中辣",
+    "spice_hot": "重辣",
+    "no_beef": "不吃牛肉",
+    "no_pork": "不吃猪肉",
+    "vegetarian": "素食",
+    "vegan": "纯素",
+    "gluten_free": "无麸质",
+    "nut_free": "无坚果",
+    "no_seafood": "海鲜过敏",
+    "cuisine_sichuan": "川菜",
+    "cuisine_cantonese": "粤菜",
+    "cuisine_japanese": "日料",
+    "cuisine_western": "西餐",
+    "cuisine_korean": "韩餐",
+    "cuisine_thai": "泰餐"
+  },
+  "errors": {
+    "user_not_found": "用户未找到"
+  }
+}

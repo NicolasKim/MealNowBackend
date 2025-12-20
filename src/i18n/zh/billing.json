@@ -1,0 +1,10 @@
+{
+  "quota": {
+    "member_benefit": "会员权益消耗",
+    "trial": "试用额度消耗",
+    "first_trial": "首次试用消耗"
+  },
+  "subscription": {
+    "app_store": "App Store 订阅: {plan}"
+  }
+}

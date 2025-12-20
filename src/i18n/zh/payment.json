@@ -1,0 +1,25 @@
+{
+  "common": {
+    "unit_month": "/月"
+  },
+  "plans": {
+    "yearly": {
+      "title": "年度会员",
+      "description": "相当于 {price}/月",
+      "savings": "立省 {percent}%"
+    },
+    "quarterly": {
+      "title": "季度会员",
+      "description": "{price}/月"
+    },
+    "monthly": {
+      "title": "月度会员",
+      "description": "灵活订阅"
+    }
+  },
+  "errors": {
+    "receipt_verification_failed": "收据验证失败",
+    "jws_verification_failed": "JWS 验证失败: {message}",
+    "no_subscription_info": "收据中未找到订阅信息"
+  }
+}

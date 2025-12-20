@@ -1,0 +1,10 @@
+{
+  "quota": {
+    "member_benefit": "Member benefit consumption",
+    "trial": "Trial quota consumption",
+    "first_trial": "First trial consumption"
+  },
+  "subscription": {
+    "app_store": "App Store Subscription: {plan}"
+  }
+}
