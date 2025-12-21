@@ -1,6 +1,6 @@
 {
   "errors": {
-    "quota_exceeded": "Daily quota exceeded",
+    "quota_exceeded": "Trial quota exceeded, please subscribe for unlimited access",
     "ai_service_unavailable": "AI service temporarily unavailable",
     "recipe_not_found": "Recipe not found or expired"
   },

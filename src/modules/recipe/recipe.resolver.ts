@@ -10,6 +10,7 @@ import { NotificationService } from '../notification/notification.service'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import { CurrentClientInfo, ClientInfo } from '../../common/decorators/client-info.decorator'
+import { QuotaExceededError } from '../../common/errors/quota-exceeded.error'
 import { UserDocument } from '../auth/schemas/user.schema'
 import { RedisService } from '../redis/redis.service'
 import { RecipeSchedulerService } from './recipe.scheduler'
@@ -149,7 +150,8 @@ export class RecipeResolver {
     const lang = clientInfo.language;
     const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
     if (!hasQuota) {
-      throw new ForbiddenException(this.i18n.t('recipe.errors.quota_exceeded', { lang }));
+      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
+      throw new QuotaExceededError(message);
     }
 
     const taskId = new Types.ObjectId().toString();
@@ -171,7 +173,8 @@ export class RecipeResolver {
     const lang = clientInfo.language;
     const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
     if (!hasQuota) {
-      throw new ForbiddenException(this.i18n.t('recipe.errors.quota_exceeded', { lang }));
+      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
+      throw new QuotaExceededError(message);
     }
 
     // 1. Get Pantry Items
@@ -244,14 +247,39 @@ export class RecipeResolver {
 
     // 2. If not in DB, check Redis (Legacy/Migration support)
     if (!recipe) {
-        const key = `recipe:${user._id.toString()}:${id}`;
-        const cached = await this.redisService.get().get(key);
-        
-        if (!cached) {
-            throw new NotFoundException(this.i18n.t('recipe.errors.recipe_not_found', { lang }));
+        // Search in public recommendations
+        const today = new Date().toISOString().split('T')[0];
+        const mealTypes = ['breakfast', 'lunch', 'dinner'];
+        let recipeData = null;
+
+        for (const mealType of mealTypes) {
+            const key = `recommendation:public:${lang}:${today}:${mealType}`;
+            const cached = await this.redisService.get().get(key);
+            
+            if (cached) {
+                const recipes = JSON.parse(cached);
+                if (Array.isArray(recipes)) {
+                    const found = recipes.find((r: any) => r.id === id || r._id === id);
+                    if (found) {
+                        recipeData = found;
+                        break;
+                    }
+                }
+            }
         }
         
-        const recipeData = JSON.parse(cached);
+        if (!recipeData) {
+            // Fallback to legacy key check
+            const key = `recipe:${user._id.toString()}:${id}`;
+            const cached = await this.redisService.get().get(key);
+            if (cached) {
+                recipeData = JSON.parse(cached);
+            }
+        }
+
+        if (!recipeData) {
+            throw new NotFoundException(this.i18n.t('recipe.errors.recipe_not_found', { lang }));
+        }
         
         // Save to MongoDB
         recipe = await this.recipeModel.findByIdAndUpdate(

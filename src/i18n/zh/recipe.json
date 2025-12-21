@@ -1,6 +1,6 @@
 {
   "errors": {
-    "quota_exceeded": "今日额度已用完",
+    "quota_exceeded": "试用次数已用完，订阅会员即可无限畅享",
     "ai_service_unavailable": "AI 服务暂时不可用",
     "recipe_not_found": "菜谱未找到或已过期"
   },
