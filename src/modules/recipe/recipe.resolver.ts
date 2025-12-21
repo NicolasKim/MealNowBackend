@@ -43,6 +43,7 @@ export class RecipeResolver {
     generationFn: () => Promise<any[]>,
     lang: string
   ) {
+    this.logger.log(`Starting async generation for task ${taskId} user ${user._id}`);
     try {
       const recipes = await generationFn();
       
@@ -63,6 +64,8 @@ export class RecipeResolver {
           id: saved._id.toString()
         });
       }
+
+      this.logger.log(`Task ${taskId} completed. Publishing to user ${user._id}`);
 
       // Publish notification
       await this.pubSub.publish('taskCompleted', {
@@ -167,6 +170,7 @@ export class RecipeResolver {
   @UseGuards(JwtAuthGuard)
   async generateSurpriseRecipes(
     @Args('count') count: number,
+    @Args('mealType', { nullable: true }) mealType: string,
     @CurrentUser() user: UserDocument,
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
@@ -219,7 +223,8 @@ export class RecipeResolver {
                 expiringIngredients: expiring,
                 freshIngredients: fresh,
                 preference,
-                count
+                count,
+                mealType
             }, clientInfo.language);
         } catch (e) {
             this.logger.error('AI Service call failed', e);
@@ -306,6 +311,20 @@ export class RecipeResolver {
       ...recipe.toObject(),
       id: recipe._id.toString()
     };
+  }
+
+  @Mutation('removeFromFavorites')
+  @UseGuards(JwtAuthGuard)
+  async removeFromFavorites(
+    @Args('id') id: string,
+    @CurrentUser() user: UserDocument
+  ) {
+    const result = await this.userModel.findByIdAndUpdate(
+      user._id,
+      { $pull: { savedRecipes: id } },
+      { new: true }
+    );
+    return !!result;
   }
 
   @Query('myRecipes')

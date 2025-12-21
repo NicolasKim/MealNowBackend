@@ -196,6 +196,7 @@ ${RECIPE_OUTPUT_STRUCTURE}`
     freshIngredients: { name: string; quantity: number; unit: string }[]
     preference?: any
     count: number
+    mealType?: string
   }, lang: string = 'zh') {
     const model = process.env.AI_MODEL_RECIPE || 'anthropic/claude-3.7-sonnet:thinking'
     // Don't cache surprise recipes as inventory changes frequently
@@ -204,7 +205,7 @@ ${RECIPE_OUTPUT_STRUCTURE}`
     const messages: Message[] = [
       {
         role: 'system',
-        content: `你是一个创意大厨。请根据用户的现有食材和偏好生成创意食谱。
+        content: `你是一个创意大厨。请根据用户的现有食材和偏好${payload.mealType ? `为${payload.mealType}` : ''}生成创意食谱。
         
 规则：
 1. **搭配**：合理搭配"新鲜食材"，充分利用"即将过期食材"。
@@ -224,6 +225,7 @@ ${RECIPE_OUTPUT_STRUCTURE}
       {
         role: 'user',
         content: JSON.stringify({
+          mealType: payload.mealType,
           expiring: payload.expiringIngredients,
           fresh: payload.freshIngredients,
           preferences: payload.preference

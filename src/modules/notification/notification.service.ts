@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import * as apn from '@parse/node-apn';
 import * as path from 'path';
 import * as fs from 'fs';
+import { User, UserDocument } from '../auth/schemas/user.schema';
 
 @Injectable()
 export class NotificationService {
@@ -9,7 +12,9 @@ export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private readonly bundleId: string;
 
-  constructor() {
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>
+  ) {
     // Attempt to load APNs configuration
     // In a real scenario, these should be in environment variables
     const keyId = process.env.APNS_KEY_ID || 'U856VG76WZ';
@@ -57,7 +62,23 @@ export class NotificationService {
       
       if (result.failed.length > 0) {
         this.logger.error(`Failed to send notifications: ${JSON.stringify(result.failed)}`);
-        // Handle invalid tokens (cleanup) logic could go here
+        
+        // Cleanup invalid tokens
+        const invalidTokens = result.failed
+            .filter(f => f.status === 410 || f.response?.reason === 'Unregistered' || f.response?.reason === 'BadDeviceToken')
+            .map(f => f.device);
+
+        if (invalidTokens.length > 0) {
+            this.logger.log(`Removing ${invalidTokens.length} invalid tokens`);
+            try {
+                await this.userModel.updateMany(
+                    { deviceTokens: { $in: invalidTokens } },
+                    { $pull: { deviceTokens: { $in: invalidTokens } } }
+                );
+            } catch (err) {
+                this.logger.error('Failed to remove invalid tokens', err);
+            }
+        }
       }
       
       if (result.sent.length > 0) {

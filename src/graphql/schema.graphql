@@ -32,6 +32,7 @@ type User {
   timezone: String
   tastePreferences: [String!]!
   savedRecipes: [Recipe!]!
+  savedRecipesCount: Int!
 }
 
 type TastePreferenceOption {
@@ -235,7 +236,7 @@ type Mutation {
   removeIngredient(id: ID!): Boolean!
 
   generateRecipes(input: GenerateRecipeInput!, count: Int!): TaskResponse!
-  generateSurpriseRecipes(count: Int!): TaskResponse!
+  generateSurpriseRecipes(count: Int!, mealType: String): TaskResponse!
   addMissingToCart(recipeId: ID!): Cart!
 
   verifyAppStoreReceipt(receiptData: String!): Boolean!
@@ -243,5 +244,6 @@ type Mutation {
 
   completeOnboarding(tastePreferences: [String!]!): User!
   addToFavorites(id: String!): Recipe!
+  removeFromFavorites(id: String!): Boolean!
   deleteRecipe(id: ID!): Boolean!
 }  

@@ -24,4 +24,9 @@ export class UserRecipeResolver {
       };
     });
   }
+
+  @ResolveField('savedRecipesCount')
+  async getSavedRecipesCount(@Parent() user: UserDocument) {
+    return user.savedRecipes?.length || 0;
+  }
 }

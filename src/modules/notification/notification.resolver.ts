@@ -12,6 +12,7 @@ export class NotificationResolver {
   @Subscription('taskCompleted', {
     resolve: (payload) => payload.taskCompleted,
     filter: (payload, variables) => {
+        console.log(`[NotificationResolver] Filter: payloadUserId=${payload.taskCompleted.userId}, varUserId=${variables.userId}`);
         // Filter by userId if provided
         if (variables.userId) {
             return payload.taskCompleted.userId === variables.userId;

@@ -25,12 +25,21 @@ export class PreferenceService implements OnModuleInit {
     { category: 'dietary', value: 'no_seafood', icon: '🦐', label: { en: 'No Seafood', zh: '海鲜过敏' } },
 
     // Cuisine Preferences
-    { category: 'cuisine', value: 'cuisine_sichuan', icon: '🍜', label: { en: 'Sichuan Cuisine', zh: '川菜' } },
-    { category: 'cuisine', value: 'cuisine_cantonese', icon: '🥡', label: { en: 'Cantonese Cuisine', zh: '粤菜' } },
+    { category: 'cuisine', value: 'cuisine_sichuan', icon: '🌶️', label: { en: 'Sichuan Cuisine', zh: '川菜' } },
+    { category: 'cuisine', value: 'cuisine_cantonese', icon: '🇲🇴', label: { en: 'Cantonese Cuisine', zh: '粤菜' } },
+    { category: 'cuisine', value: 'cuisine_xiang', icon: '🥘', label: { en: 'Hunan Cuisine', zh: '湘菜' } },
+    { category: 'cuisine', value: 'cuisine_jiangzhe', icon: '🦐', label: { en: 'Jiangzhe Cuisine', zh: '江浙菜' } },
+    { category: 'cuisine', value: 'cuisine_northern', icon: '🥯', label: { en: 'Northern Cuisine', zh: '北方菜' } },
     { category: 'cuisine', value: 'cuisine_japanese', icon: '🍱', label: { en: 'Japanese Cuisine', zh: '日料' } },
+    { category: 'cuisine', value: 'cuisine_korean', icon: '🇰🇷', label: { en: 'Korean Cuisine', zh: '韩餐' } },
+    { category: 'cuisine', value: 'cuisine_thai', icon: '🥥', label: { en: 'Thai Cuisine', zh: '泰餐' } },
+    { category: 'cuisine', value: 'cuisine_vietnamese', icon: '🍜', label: { en: 'Vietnamese', zh: '越南菜' } },
+    { category: 'cuisine', value: 'cuisine_indian', icon: '🍛', label: { en: 'Indian', zh: '印度菜' } },
+    { category: 'cuisine', value: 'cuisine_italian', icon: '🍕', label: { en: 'Italian', zh: '意式料理' } },
+    { category: 'cuisine', value: 'cuisine_french', icon: '🥐', label: { en: 'French', zh: '法式料理' } },
+    { category: 'cuisine', value: 'cuisine_american', icon: '🍔', label: { en: 'American', zh: '美式料理' } },
+    { category: 'cuisine', value: 'cuisine_mexican', icon: '🌮', label: { en: 'Mexican', zh: '墨西哥菜' } },
     { category: 'cuisine', value: 'cuisine_western', icon: '🍝', label: { en: 'Western Cuisine', zh: '西餐' } },
-    { category: 'cuisine', value: 'cuisine_korean', icon: '🍲', label: { en: 'Korean Cuisine', zh: '韩餐' } },
-    { category: 'cuisine', value: 'cuisine_thai', icon: '🍛', label: { en: 'Thai Cuisine', zh: '泰餐' } },
   ];
 
   constructor(
@@ -43,16 +52,19 @@ export class PreferenceService implements OnModuleInit {
 
   private async seedPreferences() {
     try {
-      const count = await this.tastePreferenceModel.countDocuments();
-      if (count === 0) {
-        this.logger.log('Seeding taste preferences...');
-        await this.tastePreferenceModel.insertMany(this.TASTE_PREFERENCE_DEFINITIONS);
-        this.logger.log('Taste preferences seeded successfully.');
-      } else {
-        // Optional: Check if we need to add new ones?
-        // For now, just skip if any exist, as per "if not in database" requirement.
-        this.logger.log('Taste preferences already exist. Skipping seed.');
-      }
+      this.logger.log('Seeding/Updating taste preferences...');
+      
+      const operations = this.TASTE_PREFERENCE_DEFINITIONS.map(pref => ({
+        updateOne: {
+          filter: { category: pref.category, value: pref.value },
+          update: { $set: pref },
+          upsert: true
+        }
+      }));
+
+      await this.tastePreferenceModel.bulkWrite(operations);
+      
+      this.logger.log('Taste preferences seeded/updated successfully.');
     } catch (error: any) {
       this.logger.error(`Failed to seed taste preferences: ${error.message}`, error.stack);
     }
