@@ -2,6 +2,7 @@
   "errors": {
     "quota_exceeded": "Trial quota exceeded, please subscribe for unlimited access",
     "ai_service_unavailable": "AI service temporarily unavailable",
+    "generation_failed": "Generation failed, please try again later",
     "recipe_not_found": "Recipe not found or expired"
   },
   "meal_types": {

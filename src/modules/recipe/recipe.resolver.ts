@@ -47,6 +47,10 @@ export class RecipeResolver {
     try {
       const recipes = await generationFn();
       
+      if (!recipes || recipes.length === 0) {
+        throw new Error(this.i18n.t('recipe.errors.generation_failed', { lang }));
+      }
+
       // Store recipes in MongoDB
       const savedRecipes = [];
       for (const recipe of recipes) {
@@ -59,10 +63,13 @@ export class RecipeResolver {
           },
           { new: true, upsert: true }
         );
-        savedRecipes.push({
-          ...saved.toObject(),
-          id: saved._id.toString()
-        });
+        
+        if (saved) {
+            savedRecipes.push({
+            ...saved.toObject(),
+            id: saved._id.toString()
+            });
+        }
       }
 
       this.logger.log(`Task ${taskId} completed. Publishing to user ${user._id}`);
