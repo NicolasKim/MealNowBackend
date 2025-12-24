@@ -8,6 +8,7 @@ import { User, UserSchema } from './schemas/user.schema';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RedisModule } from '../redis/redis.module';
 import { EmailModule } from '../email/email.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
     imports: [
@@ -19,6 +20,7 @@ import { EmailModule } from '../email/email.module';
         }),
         RedisModule,
         EmailModule,
+        BillingModule,
     ],
     providers: [AuthResolver, AuthService, JwtStrategy],
     exports: [AuthService, JwtStrategy, PassportModule],

@@ -8,6 +8,7 @@ type UserSubscription {
   remainingTrials: Int!
   appStoreSubscriptionId: String
   autoRenew: Boolean
+  dailyRemaining: Int
 }
 
 type User {
@@ -67,7 +68,7 @@ type Recipe {
   imageUrl: String
   cookTimeMinutes: Int!
   difficulty: String!
-  matchRate: Int!
+  matchRate: Float!
   ingredients: [RecipeIngredient!]!
   steps: [RecipeStep!]!
   missing: [IngredientRequirement!]!
@@ -176,6 +177,10 @@ type SubscriptionPlan {
   pricePerUnit: String
 }
 
+type BillingConfig {
+  dailyUsageLimit: Int!
+}
+
 input IngredientInput {
   name: String!
   quantity: Float!
@@ -198,6 +203,7 @@ input GenerateRecipeInput {
 }
 
 type Query {
+  billingConfig: BillingConfig!
   me: User
   pantry: [PantryItem!]!
   dailyRecommendations(mealType: String!): [Recipe!]!

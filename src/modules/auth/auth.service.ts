@@ -8,6 +8,7 @@ import { RedisService } from '../redis/redis.service';
 import { EmailService } from '../email/email.service';
 import appleSignin from 'apple-signin-auth';
 import { I18nService } from 'nestjs-i18n';
+import { BillingService } from '../billing/billing.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,7 @@ export class AuthService {
         private readonly redisService: RedisService,
         private readonly emailService: EmailService,
         private readonly i18n: I18nService,
+        private readonly billingService: BillingService,
     ) { }
 
     async sendVerificationCode(email: string, lang: string = 'en'): Promise<boolean> {
@@ -104,6 +106,9 @@ export class AuthService {
             language: lang,
         });
         await user.save();
+
+        // Create trial subscription
+        await this.billingService.createTrialSubscription(user.id);
 
         const token = this.generateToken(user);
         return { token, user };
@@ -253,6 +258,9 @@ export class AuthService {
                 language: lang,
             });
             await user.save();
+            
+            // Create trial subscription
+            await this.billingService.createTrialSubscription(user.id);
         } else {
              // Update language for existing user only if not set
              if (!user.language) {

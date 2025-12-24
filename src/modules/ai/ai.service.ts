@@ -30,7 +30,7 @@ const RECIPE_OUTPUT_STRUCTURE = `{
   "description": "简短描述（包含推荐理由）",
   "cookTimeMinutes": 30,
   "difficulty": "Easy/Medium/Hard",
-  "matchRate": 85,4
+  "matchRate": 85.5,
   "ingredients": [
       { "name": "食材名", "amount": 100, "unit": "g" }
   ],

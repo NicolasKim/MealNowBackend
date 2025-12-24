@@ -9,6 +9,11 @@ import { UserDocument } from '../auth/schemas/user.schema';
 export class BillingResolver {
   constructor(private readonly billingService: BillingService) {}
 
+  @Query('billingConfig')
+  async billingConfig() {
+    return this.billingService.getBillingConfig();
+  }
+
   @Query('usageHistory')
   @UseGuards(JwtAuthGuard)
   async usageHistory(

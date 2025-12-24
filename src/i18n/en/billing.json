@@ -1,8 +1,10 @@
 {
   "quota": {
     "member_benefit": "Member benefit consumption",
+    "member_benefit_combo": "Member benefit (Combo)",
     "trial": "Trial quota consumption",
-    "first_trial": "First trial consumption"
+    "first_trial": "First trial consumption",
+    "daily_limit_reached": "Daily usage limit reached ({limit}/day). Please come back tomorrow."
   },
   "subscription": {
     "app_store": "App Store Subscription: {plan}"
