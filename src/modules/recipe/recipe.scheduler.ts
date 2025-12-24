@@ -37,7 +37,7 @@ export class RecipeSchedulerService {
 
     const candidateIds = Array.from(new Set([...subscriberIds, ...trialUserIds]));
     
-    const activeDaysThreshold = parseInt(process.env.DAILY_RECOMMENDATION_ACTIVE_DAYS || '5', 5);
+    const activeDaysThreshold = parseInt(process.env.DAILY_RECOMMENDATION_ACTIVE_DAYS || '5', 10);
     const fiveDaysAgo = new Date();
     fiveDaysAgo.setDate(fiveDaysAgo.getDate() - activeDaysThreshold);
 
