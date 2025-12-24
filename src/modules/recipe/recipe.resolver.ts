@@ -119,12 +119,8 @@ export class RecipeResolver {
       return this.recipeScheduler.generatePublicRecommendations(mealType, lang);
     }
 
-    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe', lang)
-    if (!hasQuota) {
-      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
-      throw new QuotaExceededError(message);
-    }
-
+    // Lock logic has been moved to recipeScheduler.generateForUser
+    // to protect both API calls and scheduled tasks
     return this.recipeScheduler.generateForUser(user, mealType, false, lang)
   }
 

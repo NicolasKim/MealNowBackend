@@ -88,7 +88,7 @@ export class RecipeSchedulerService {
       // Ensure public recommendations exist for all supported languages
       const supportedLanguages = ['en', 'zh'];
       for (const lang of supportedLanguages) {
-        await this.generatePublicRecommendations(mealType, lang);
+        await this.generatePublicRecommendations(mealType, lang, true);
       }
 
       // Generate for each user
@@ -105,16 +105,32 @@ export class RecipeSchedulerService {
     // but for now, I'll remove the cron usage of it.
   }
 
-  async generatePublicRecommendations(mealType: string, lang: string = 'en') {
+  async generatePublicRecommendations(mealType: string, lang: string = 'en', isScheduled: boolean = false) {
     const style = this.i18n.t(`recipe.meal_styles.${mealType}`, { lang, defaultValue: this.i18n.t(`recipe.meal_styles.dinner`, { lang }) });
     const today = new Date().toISOString().split('T')[0];
     const key = `recommendation:public:${lang}:${today}:${mealType}`;
+    const lockKey = `lock:public_recommendation:${lang}:${today}:${mealType}`;
     
     // Check cache
-    const cached = await this.redisService.get().get(key);
+    const redis = this.redisService.get();
+    const cached = await redis.get(key);
     if (cached) return JSON.parse(cached);
 
+    // Try to acquire lock
+    const acquired = await redis.set(lockKey, '1', 'EX', 60, 'NX');
+    if (!acquired) {
+         if (isScheduled) {
+             this.logger.log(`Skipping scheduled public generation for ${lang}/${mealType} - lock exists`);
+             return [];
+         }
+         throw new Error(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
+    }
+
     try {
+        // Double check cache
+        const doubleCheck = await redis.get(key);
+        if (doubleCheck) return JSON.parse(doubleCheck);
+
         this.logger.log(`Generating public ${mealType} recommendations for lang ${lang}...`);
         const recommendations = await this.aiService.generateDailyRecommendations({
             mealType,
@@ -126,13 +142,15 @@ export class RecipeSchedulerService {
         
         if (recommendations && recommendations.length > 0) {
             const content = JSON.stringify(recommendations);
-            await this.redisService.get().setex(key, 86400, content);
+            await redis.setex(key, 86400, content);
             return recommendations;
         }
         return [];
     } catch (error) {
         this.logger.error(`Error generating public recommendations`, error);
         return [];
+    } finally {
+        await redis.del(lockKey);
     }
   }
 
@@ -148,23 +166,49 @@ export class RecipeSchedulerService {
 
     const style = this.i18n.t(`recipe.meal_styles.${mealType}`, { lang, defaultValue: this.i18n.t(`recipe.meal_styles.dinner`, { lang }) });
     
+    // Check DB first for today's recommendations
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0,0,0,0);
+    const endOfDay = new Date();
+    endOfDay.setUTCHours(23,59,59,999);
+
+    const existing = await this.recipeModel.find({
+        userId: user._id,
+        mealType: mealType,
+        createdAt: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    if (existing && existing.length > 0) {
+            return existing.map(r => ({ ...r.toObject(), id: r._id.toString() }));
+    }
+
+    // Double check lock inside scheduler to be safe, especially for scheduled tasks
+    const lockKey = `lock:recipe_generation:${user._id}:${mealType}`;
+    const redis = this.redisService.get();
+    
+    // Only check lock if not already checked by caller (e.g. scheduled tasks calling this directly)
+    // But since this method is public, it's safer to have lock here or ensure caller handles it.
+    // Given the request to move lock here, we will implement it here.
+    
+    // Note: If called from Resolver which ALREADY locked, we might need to be careful.
+    // However, the user asked to put the lock HERE. 
+    // If the Resolver also locks, we need to remove the lock from Resolver to avoid double locking/deadlock if same key used without re-entrancy.
+    // Or we assume Resolver removed its lock logic.
+    // I will proceed to add lock here and then remove from Resolver in next step.
+
+    const isLocked = await redis.get(lockKey);
+    if (isLocked) {
+         // If scheduled, we might just skip. If triggered by user, we throw.
+         if (isScheduled) {
+             this.logger.log(`Skipping scheduled generation for user ${userId} - lock exists`);
+             return [];
+         }
+         throw new Error(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
+    }
+
+    await redis.set(lockKey, '1', 'EX', 60); // 60s lock
+
     try {
-        // Check DB first for today's recommendations
-        const startOfDay = new Date();
-        startOfDay.setUTCHours(0,0,0,0);
-        const endOfDay = new Date();
-        endOfDay.setUTCHours(23,59,59,999);
-
-        const existing = await this.recipeModel.find({
-            userId: user._id,
-            mealType: mealType,
-            createdAt: { $gte: startOfDay, $lte: endOfDay }
-        });
-
-        if (existing && existing.length > 0) {
-             return existing.map(r => ({ ...r.toObject(), id: r._id.toString() }));
-        }
-
         const pantryItems = await this.pantryService.findAll(userId);
         
         const now = new Date();
@@ -231,7 +275,9 @@ export class RecipeSchedulerService {
 
     } catch (error) {
         this.logger.error(`Error generating recommendations for user ${user._id}`, error);
-        return [];
+        throw error; // Re-throw to let resolver handle or user see error
+    } finally {
+        await redis.del(lockKey);
     }
   }
 }

@@ -3,6 +3,7 @@
     "quota_exceeded": "试用次数已用完，订阅会员即可无限畅享",
     "ai_service_unavailable": "AI 服务暂时不可用",
     "generation_failed": "生成失败，请稍后重试",
+    "generation_in_progress": "正在为您生成美味食谱，请稍候...",
     "recipe_not_found": "菜谱未找到或已过期"
   },
   "meal_types": {

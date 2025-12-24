@@ -3,6 +3,7 @@
     "quota_exceeded": "Trial quota exceeded, please subscribe for unlimited access",
     "ai_service_unavailable": "AI service temporarily unavailable",
     "generation_failed": "Generation failed, please try again later",
+    "generation_in_progress": "Generation in progress, please wait...",
     "recipe_not_found": "Recipe not found or expired"
   },
   "meal_types": {
