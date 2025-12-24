@@ -20,6 +20,8 @@ import { JwtAuthGuardOptional } from '../auth/guards/jwt-auth-optional.guard'
 
 import { I18nService } from 'nestjs-i18n'
 
+import { GenerationInProgressError } from '../../common/errors/generation-in-progress.error';
+
 @Resolver()
 export class RecipeResolver {
   private readonly logger = new Logger(RecipeResolver.name);
@@ -187,67 +189,83 @@ export class RecipeResolver {
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
     const lang = clientInfo.language;
-    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
-    if (!hasQuota) {
-      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
-      throw new QuotaExceededError(message);
+    const lockKey = `lock:surprise_recipe:${user._id}`;
+    const redis = this.redisService.get();
+
+    // Try to acquire lock
+    const acquired = await redis.set(lockKey, '1', 'EX', 300, 'NX');
+    if (!acquired) {
+         throw new GenerationInProgressError(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
     }
 
-    // 1. Get Pantry Items
-    const items = await this.pantryService.findAll(user._id.toString());
-    
-    // 2. Categorize Ingredients
-    const now = new Date();
-    const expiring: { name: string; quantity: number; unit: string }[] = [];
-    const fresh: { name: string; quantity: number; unit: string }[] = [];
+    try {
+        const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
+        if (!hasQuota) {
+          const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
+          throw new QuotaExceededError(message);
+        }
 
-    items.forEach(item => {
-      const ingredient = {
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit
-      };
-
-      if (item.expiryDate) {
-        const expiry = new Date(item.expiryDate);
-        const diffTime = expiry.getTime() - now.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        // 1. Get Pantry Items
+        const items = await this.pantryService.findAll(user._id.toString());
         
-        if (diffDays <= 5) {
-          expiring.push(ingredient);
-        } else {
-          fresh.push(ingredient);
-        }
-      } else {
-        fresh.push(ingredient);
-      }
-    });
+        // 2. Categorize Ingredients
+        const now = new Date();
+        const expiring: { name: string; quantity: number; unit: string }[] = [];
+        const fresh: { name: string; quantity: number; unit: string }[] = [];
 
-    // 3. Get User Preferences
-    const preference = {
-      tags: user.tastePreferences,
-    };
+        items.forEach(item => {
+          const ingredient = {
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit
+          };
 
-    const taskId = new Types.ObjectId().toString();
-    const generationFn = async () => {
-        try {
-            return await this.ai.generateSurpriseRecipes({
-                expiringIngredients: expiring,
-                freshIngredients: fresh,
-                preference,
-                count,
-                mealType
-            }, clientInfo.language);
-        } catch (e) {
-            this.logger.error('AI Service call failed', e);
-            throw new Error(this.i18n.t('recipe.errors.ai_service_unavailable', { lang }));
-        }
-    };
+          if (item.expiryDate) {
+            const expiry = new Date(item.expiryDate);
+            const diffTime = expiry.getTime() - now.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            if (diffDays <= 5) {
+              expiring.push(ingredient);
+            } else {
+              fresh.push(ingredient);
+            }
+          } else {
+            fresh.push(ingredient);
+          }
+        });
 
-    // Fire and forget
-    this.handleAsyncRecipeGeneration(taskId, user, generationFn, lang);
+        // 3. Get User Preferences
+        const preference = {
+          tags: user.tastePreferences,
+        };
 
-    return { taskId, message: 'Surprise recipe generation started' };
+        const taskId = new Types.ObjectId().toString();
+        const generationFn = async () => {
+            try {
+                return await this.ai.generateSurpriseRecipes({
+                    expiringIngredients: expiring,
+                    freshIngredients: fresh,
+                    preference,
+                    count,
+                    mealType
+                }, clientInfo.language);
+            } catch (e) {
+                this.logger.error('AI Service call failed', e);
+                throw new Error(this.i18n.t('recipe.errors.ai_service_unavailable', { lang }));
+            } finally {
+                await redis.del(lockKey);
+            }
+        };
+
+        // Fire and forget
+        this.handleAsyncRecipeGeneration(taskId, user, generationFn, lang);
+
+        return { taskId, message: 'Surprise recipe generation started' };
+    } catch (error) {
+        await redis.del(lockKey);
+        throw error;
+    }
   }
 
   @Mutation('addToFavorites')

@@ -13,6 +13,8 @@ import { NotificationService } from '../notification/notification.service';
 
 import { Recipe } from './schemas/recipe.schema';
 
+import { GenerationInProgressError } from '../../common/errors/generation-in-progress.error';
+
 @Injectable()
 export class RecipeSchedulerService {
   private readonly logger = new Logger(RecipeSchedulerService.name);
@@ -123,7 +125,7 @@ export class RecipeSchedulerService {
              this.logger.log(`Skipping scheduled public generation for ${lang}/${mealType} - lock exists`);
              return [];
          }
-         throw new Error(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
+         throw new GenerationInProgressError(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
     }
 
     try {
@@ -203,7 +205,7 @@ export class RecipeSchedulerService {
              this.logger.log(`Skipping scheduled generation for user ${userId} - lock exists`);
              return [];
          }
-         throw new Error(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
+         throw new GenerationInProgressError(this.i18n.t('recipe.errors.generation_in_progress', { lang, defaultValue: 'Generation in progress, please wait...' }));
     }
 
     await redis.set(lockKey, '1', 'EX', 60); // 60s lock
