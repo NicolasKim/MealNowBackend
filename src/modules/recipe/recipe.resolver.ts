@@ -113,10 +113,19 @@ export class RecipeResolver {
     @Args('mealType') mealType: string,
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
+    const lang = clientInfo.language;
+
     if (!user) {
-      return this.recipeScheduler.generatePublicRecommendations(mealType, clientInfo.language);
+      return this.recipeScheduler.generatePublicRecommendations(mealType, lang);
     }
-    return this.recipeScheduler.generateForUser(user, mealType, false, clientInfo.language)
+
+    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe', lang)
+    if (!hasQuota) {
+      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
+      throw new QuotaExceededError(message);
+    }
+
+    return this.recipeScheduler.generateForUser(user, mealType, false, lang)
   }
 
   @Query('recommendations')

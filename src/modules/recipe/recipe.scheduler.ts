@@ -32,20 +32,22 @@ export class RecipeSchedulerService {
   async handleHourlySchedule() {
     this.logger.log('Running hourly recommendation schedule check...');
 
-    // 1. Get all active subscribers who are also recently active on the platform
     const subscriberIds = await this.billingService.findAllActiveSubscriberIds();
+    const trialUserIds = await this.billingService.findAllActiveTrialUserIds();
+
+    const candidateIds = Array.from(new Set([...subscriberIds, ...trialUserIds]));
     
-    // Calculate the date 5 days ago
+    const activeDaysThreshold = parseInt(process.env.DAILY_RECOMMENDATION_ACTIVE_DAYS || '5', 5);
     const fiveDaysAgo = new Date();
-    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - activeDaysThreshold);
 
     const users = await this.userModel.find({ 
-      _id: { $in: subscriberIds },
+      _id: { $in: candidateIds },
       lastActiveAt: { $gte: fiveDaysAgo } // Only include users active in the last 5 days
     });
 
-    if (users.length < subscriberIds.length) {
-      this.logger.log(`Skipped ${subscriberIds.length - users.length} users due to inactivity (> 5 days).`);
+    if (users.length < candidateIds.length) {
+      this.logger.log(`Skipped ${candidateIds.length - users.length} users due to inactivity (> 5 days).`);
     }
 
     // 2. Group users by required action (mealType)

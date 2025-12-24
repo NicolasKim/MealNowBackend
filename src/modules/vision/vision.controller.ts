@@ -7,13 +7,16 @@ import { BillingService } from '../billing/billing.service'
 import { JwtAuthRestGuard } from '../auth/guards/jwt-auth-rest.guard'
 import { Request } from 'express'
 import { UserDocument } from '../auth/schemas/user.schema'
+import { I18nService } from 'nestjs-i18n'
+import { QuotaExceededError } from '../../common/errors/quota-exceeded.error'
 
 @Controller('vision')
 export class VisionController {
   constructor(
     private readonly storage: StorageService,
     private readonly ai: AiService,
-    private readonly billing: BillingService
+    private readonly billing: BillingService,
+    private readonly i18n: I18nService
   ) {}
 
   @Post('upload-url')
@@ -49,12 +52,17 @@ export class VisionController {
       return { url: '', items: [] }
     }
 
-    const items = await this.ai.recognizeIngredientsFromImage(url, 'zh')
+    const user = req.user as UserDocument
+    const lang = user?.language || 'zh'
 
-    const user = req.user as UserDocument;
-    await this.billing.recordUsage(user._id.toString(), 'recognize_ingredients', 1);
+    const hasQuota = await this.billing.checkAndConsumeQuota(user._id.toString(), 'recognize_ingredients', lang)
+    if (!hasQuota) {
+      const message = this.i18n.t('recipe.errors.quota_exceeded', { lang })
+      throw new QuotaExceededError(message)
+    }
+
+    const items = await this.ai.recognizeIngredientsFromImage(url, 'zh')
 
     return { url, items }
   }
 }
-

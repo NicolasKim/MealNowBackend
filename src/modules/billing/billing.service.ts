@@ -48,6 +48,30 @@ export class BillingService {
     this.logger.log('getUserSubscription', sub)
     if (!sub) return null
 
+    const now = new Date()
+
+    if (sub.plan === 'trial') {
+      const trialExpiredByTime = !!sub.endAt && new Date(sub.endAt) <= now
+      const noTrialsLeft = (sub.remainingTrials || 0) <= 0
+
+      if (trialExpiredByTime || noTrialsLeft) {
+        await this.subscriptions.updateOne(
+          { _id: sub._id },
+          {
+            $set: {
+              plan: 'free',
+              endAt: null,
+              remainingTrials: 0
+            }
+          }
+        )
+
+        sub.plan = 'free'
+        sub.endAt = undefined
+        sub.remainingTrials = 0
+      }
+    }
+
     const DAILY_LIMIT = parseInt(process.env.DAILY_USAGE_LIMIT || '20', 10);
     const todayUsage = await this.getTodayUsageCount(userId);
     const dailyRemaining = Math.max(0, DAILY_LIMIT - todayUsage);
@@ -65,21 +89,33 @@ export class BillingService {
   }
 
   async hasActiveSubscription(userId: string): Promise<boolean> {
-    const sub = await this.subscriptions.findOne({ userId }).lean();
-    if (!sub) return false;
+    const sub = await this.subscriptions.findOne({ userId }).lean()
+    if (!sub) return false
+
+    const now = new Date()
 
     const premiumPlans = [
       'com.mealnow.premium.monthly',
       'com.mealnow.premium.quarterly',
       'com.mealnow.premium.yearly'
-    ];
+    ]
 
     if (sub.status === 'active' && premiumPlans.includes(sub.plan)) {
-      if (!sub.endAt || new Date(sub.endAt) > new Date()) {
-        return true;
+      if (!sub.endAt || new Date(sub.endAt) > now) {
+        return true
       }
     }
-    return false;
+
+    if (
+      sub.status === 'active' &&
+      sub.plan === 'trial' &&
+      (!sub.endAt || new Date(sub.endAt) > now) &&
+      (sub.remainingTrials || 0) > 0
+    ) {
+      return true
+    }
+
+    return false
   }
 
   async findAllActiveSubscriberIds(): Promise<string[]> {
@@ -99,9 +135,25 @@ export class BillingService {
         { endAt: { $exists: false } },
         { endAt: { $gt: now } }
       ]
-    }).select('userId').lean();
+    }).select('userId').lean()
 
-    return subs.map(sub => sub.userId);
+    return subs.map(sub => sub.userId)
+  }
+
+  async findAllActiveTrialUserIds(): Promise<string[]> {
+    const now = new Date()
+
+    const trials = await this.subscriptions.find({
+      status: 'active',
+      plan: 'trial',
+      $or: [
+        { endAt: { $exists: false } },
+        { endAt: { $gt: now } }
+      ],
+      remainingTrials: { $gt: 0 }
+    }).select('userId').lean()
+
+    return trials.map(sub => sub.userId)
   }
 
   async recordUsage(userId: string, type: string, amount: number, description?: string, relatedId?: string) {
@@ -138,8 +190,38 @@ export class BillingService {
       sub = await this.createTrialSubscription(userId);
     }
 
+    const now = new Date()
+
+    if (sub.plan === 'trial') {
+      const trialExpiredByTime = !!sub.endAt && new Date(sub.endAt) <= now
+      const noTrialsLeft = (sub.remainingTrials || 0) <= 0
+
+      if (trialExpiredByTime || noTrialsLeft) {
+        await this.subscriptions.updateOne(
+          { _id: sub._id },
+          {
+            $set: {
+              plan: 'free',
+              endAt: null,
+              remainingTrials: 0
+            }
+          }
+        )
+
+        sub.plan = 'free'
+        sub.endAt = undefined
+        sub.remainingTrials = 0
+      }
+    }
+
     // 1. Priority: Check Trials (Consume trials first)
-    if (sub && (sub.remainingTrials || 0) > 0) {
+    if (
+      sub &&
+      sub.plan === 'trial' &&
+      sub.status === 'active' &&
+      (!sub.endAt || new Date(sub.endAt) > now) &&
+      (sub.remainingTrials || 0) > 0
+    ) {
       const result = await this.subscriptions.updateOne(
         { userId, remainingTrials: { $gt: 0 } },
         { $inc: { remainingTrials: -1 } }
