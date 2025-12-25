@@ -59,11 +59,14 @@ export class AppStoreWebhookController {
 
       // 2. Initialize Verifier
       const bundleId = process.env.BUNDLE_ID || 'com.dreamtracer.todaysmeal';
+      const appAppleId = process.env.APP_STORE_APP_ID ? parseInt(process.env.APP_STORE_APP_ID, 10) : undefined;
+      
       const verifier = new SignedDataVerifier(
         this.rootCertificates,
         true, // enableOnlineChecks (Checks OCSP / revocation)
         environment,
-        bundleId
+        bundleId,
+        appAppleId
       );
 
       // 3. Verify and Decode

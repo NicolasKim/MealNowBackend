@@ -95,12 +95,14 @@ export class AppStoreService {
 
     const bundleId = process.env.BUNDLE_ID || 'com.dreamtracer.todaysmeal';
     const environment = (process.env.NODE_ENV === 'production') ? Environment.PRODUCTION : Environment.SANDBOX;
+    const appAppleId = this.appId ? parseInt(this.appId, 10) : undefined;
 
     this.verifier = new SignedDataVerifier(
       this.rootCertificates,
       true, // enableOnlineChecks
       environment,
-      bundleId
+      bundleId,
+      appAppleId
     );
     return this.verifier;
   }
