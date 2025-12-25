@@ -76,6 +76,9 @@ export class RecipeResolver {
 
       this.logger.log(`Task ${taskId} completed. Publishing to user ${user._id}`);
 
+      // Update task in Redis
+      await this.redisService.updateTask(taskId, 'SUCCESS', savedRecipes);
+
       // Publish notification
       await this.pubSub.publish('taskCompleted', {
         taskCompleted: {
@@ -83,7 +86,8 @@ export class RecipeResolver {
           taskId: taskId,
           type: 'recipe_generation',
           status: 'success',
-          data: savedRecipes
+          data: savedRecipes,
+          metadata: (await this.redisService.get().get(`task:${taskId}`).then(t => t ? JSON.parse(t).metadata : null))
         }
       });
 
@@ -96,6 +100,10 @@ export class RecipeResolver {
 
     } catch (error) {
       this.logger.error(`Task ${taskId} failed`, error);
+      
+      // Update task in Redis
+      await this.redisService.updateTask(taskId, 'ERROR', null, (error as any).message);
+
       await this.pubSub.publish('taskCompleted', {
         taskCompleted: {
           userId: user._id.toString(),
@@ -106,6 +114,12 @@ export class RecipeResolver {
         }
       });
     }
+  }
+
+  @Query('myTasks')
+  @UseGuards(JwtAuthGuard)
+  async myTasks(@CurrentUser() user: UserDocument) {
+    return this.redisService.getUserTasks(user._id.toString());
   }
 
   @Query('dailyRecommendations')
@@ -172,6 +186,16 @@ export class RecipeResolver {
     }
 
     const taskId = new Types.ObjectId().toString();
+    
+    // Create task in Redis
+    await this.redisService.createTask(
+      user._id.toString(), 
+      taskId, 
+      'recipe_generation', 
+      'Recipe Generation',
+      { source: 'scan', ingredientNames: input.ingredientNames }
+    );
+
     const generationFn = () => this.ai.generateRecipes({ ingredientNames: input.ingredientNames, preference: input.preference, count }, clientInfo.language);
 
     // Fire and forget
@@ -241,6 +265,10 @@ export class RecipeResolver {
         };
 
         const taskId = new Types.ObjectId().toString();
+        
+        // Create task in Redis
+        await this.redisService.createTask(user._id.toString(), taskId, 'recipe_generation', 'AI Surprise Recommendation');
+
         const generationFn = async () => {
             try {
                 return await this.ai.generateSurpriseRecipes({
@@ -266,6 +294,16 @@ export class RecipeResolver {
         await redis.del(lockKey);
         throw error;
     }
+  }
+
+  @Mutation('completeTask')
+  @UseGuards(JwtAuthGuard)
+  async completeTask(
+    @Args('taskId') taskId: string,
+    @CurrentUser() user: UserDocument
+  ) {
+    await this.redisService.deleteTask(user._id.toString(), taskId);
+    return true;
   }
 
   @Mutation('addToFavorites')

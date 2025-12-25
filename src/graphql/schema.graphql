@@ -139,12 +139,25 @@ type TaskCompletionNotification {
   type: String!
   status: String!
   data: JSON
+  metadata: JSON
 }
 
 scalar JSON
 
 type Subscription {
   taskCompleted(userId: String): TaskCompletionNotification!
+}
+
+type Task {
+  id: ID!
+  userId: String!
+  type: String!
+  status: String!
+  name: String
+  createdAt: DateTime!
+  data: JSON
+  message: String
+  metadata: JSON
 }
 
 type UsageStats {
@@ -215,6 +228,7 @@ type Query {
   myRecipes(limit: Int, offset: Int): [Recipe!]!
   subscriptionPlans: [SubscriptionPlan!]!
   hello: String
+  myTasks: [Task!]!
 }
 
 input IngredientRequirementInput {
@@ -252,4 +266,5 @@ type Mutation {
   addToFavorites(id: String!): Recipe!
   removeFromFavorites(id: String!): Boolean!
   deleteRecipe(id: ID!): Boolean!
+  completeTask(taskId: ID!): Boolean!
 }  
