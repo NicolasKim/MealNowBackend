@@ -88,31 +88,56 @@ export class AppStoreService {
     }
   }
 
-  public getVerifier(): SignedDataVerifier {
-    if (this.verifier) {
-      return this.verifier;
-    }
+  public getVerifier(environment?: Environment): SignedDataVerifier {
+    // If verifier exists and matches the requested environment (or default), return it.
+    // However, to support multiple environments, we should probably just create a new one or cache by env.
+    // For simplicity, let's create a new one if the environment differs from the default/current one,
+    // or just maintain two verifiers.
+
+    // Let's implement a simple caching strategy
+    const targetEnv = environment || ((process.env.NODE_ENV === 'production') ? Environment.PRODUCTION : Environment.SANDBOX);
+    
+    // If we have a verifier and it matches the target env (we need to store the env in the verifier or separate variable)
+    // The library verifier doesn't expose 'environment' property publicly easily.
+    // Let's just create a new one for now if an explicit environment is requested, 
+    // or rely on a "sandboxVerifier" and "productionVerifier" property.
 
     const bundleId = process.env.BUNDLE_ID || 'com.dreamtracer.todaysmeal';
-    const environment = (process.env.NODE_ENV === 'production') ? Environment.PRODUCTION : Environment.SANDBOX;
     const appAppleId = this.appId ? parseInt(this.appId, 10) : undefined;
 
-    this.verifier = new SignedDataVerifier(
+    return new SignedDataVerifier(
       this.rootCertificates,
       true, // enableOnlineChecks
-      environment,
+      targetEnv,
       bundleId,
       appAppleId
     );
-    return this.verifier;
   }
 
   async verifyJWS(token: string) {
-    const verifier = this.getVerifier();
+    // 1. Try with default environment (likely Production in prod)
     try {
+      const verifier = this.getVerifier();
       const transactionInfo = await verifier.verifyAndDecodeTransaction(token);
       return transactionInfo;
     } catch (e: any) {
+      // 2. If verification failed, check if we should try Sandbox fallback
+      // Typically, TestFlight or Sandbox receipts will fail in Production environment verification.
+      const isProduction = process.env.NODE_ENV === 'production';
+      
+      if (isProduction) {
+        this.logger.warn(`JWS Verification failed in Production. Retrying with Sandbox environment... Error: ${e.message}`);
+        try {
+          const sandboxVerifier = this.getVerifier(Environment.SANDBOX);
+          const transactionInfo = await sandboxVerifier.verifyAndDecodeTransaction(token);
+          this.logger.log('JWS Verification successful with Sandbox environment (Fallback)');
+          return transactionInfo;
+        } catch (sandboxError: any) {
+          this.logger.error(`JWS Verification failed in Sandbox fallback too: ${sandboxError.message}`);
+          throw e; // Throw the original error or the sandbox one? Usually original is more relevant if not sandbox.
+        }
+      }
+
       this.logger.error(`JWS Verification failed: ${e.message}`);
       throw e;
     }
@@ -131,6 +156,7 @@ export class AppStoreService {
 
     const payload = {
       iss: this.issuerId,
+      iat: now,
       exp: now + 20 * 60, // 20 minutes
       aud: 'appstoreconnect-v1'
     };

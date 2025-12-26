@@ -1,6 +1,5 @@
 import { Controller, Post, Body, Logger, HttpCode, InternalServerErrorException } from '@nestjs/common';
 import { BillingService } from '../billing/billing.service';
-import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SignedDataVerifier, Environment, VerificationException } from '@apple/app-store-server-library';
@@ -31,61 +30,56 @@ export class AppStoreWebhookController {
     }
   }
 
+  @Post('sandbox')
+  @HttpCode(200)
+  async handleSandboxWebhook(@Body() body: any) {
+    return this.processWebhook(body, Environment.SANDBOX);
+  }
+
+  @Post('production')
+  @HttpCode(200)
+  async handleProductionWebhook(@Body() body: any) {
+    return this.processWebhook(body, Environment.PRODUCTION);
+  }
+
   @Post()
   @HttpCode(200)
-  async handleWebhook(@Body() body: any) {
+  async handleDefaultWebhook(@Body() body: any) {
+    this.logger.warn('Received webhook on default route. Treating as Production. Please update App Store Connect to use /production or /sandbox explicitly.');
+    return this.processWebhook(body, Environment.PRODUCTION);
+  }
+
+  private async processWebhook(body: any, environment: Environment) {
     // Apple sends { signedPayload: "..." }
     if (!body.signedPayload) {
       this.logger.warn('Received webhook without signedPayload');
-      return;
+      return { ok: false, reason: 'Missing signedPayload' };
     }
 
     try {
-      // 1. Peek at the payload to determine environment (Sandbox vs Production)
-      // We use jwt.decode (unverified) just to check the 'environment' field securely verified later.
-      const unverifiedPayload: any = jwt.decode(body.signedPayload);
-      if (!unverifiedPayload) {
-        this.logger.error('Failed to decode signedPayload (unverified step)');
-        return;
-      }
+      this.logger.log(`Processing Webhook. Verifier: ${environment}`);
 
-      const payloadEnv = unverifiedPayload.data?.environment;
-      let environment = Environment.PRODUCTION;
-      if (payloadEnv === 'Sandbox') {
-        environment = Environment.SANDBOX;
-      }
-
-      this.logger.log(`Processing Webhook. Env: ${payloadEnv} -> Verifier: ${environment}`);
-
-      // 2. Initialize Verifier
+      // Initialize Verifier
       const bundleId = process.env.BUNDLE_ID || 'com.dreamtracer.todaysmeal';
       const appAppleId = process.env.APP_STORE_APP_ID ? parseInt(process.env.APP_STORE_APP_ID, 10) : undefined;
+      const enableOnlineChecks = process.env.NODE_ENV === 'production';
       
       const verifier = new SignedDataVerifier(
         this.rootCertificates,
-        true, // enableOnlineChecks (Checks OCSP / revocation)
+        enableOnlineChecks,
         environment,
         bundleId,
         appAppleId
       );
 
-      // 3. Verify and Decode
+      // Verify and Decode
       const payload = await verifier.verifyAndDecodeNotification(body.signedPayload);
 
       this.logger.log(`Verified App Store Notification: ${payload.notificationType} ${payload.subtype || ''}`);
 
       if (!payload.data) {
-        return;
+        return { ok: true };
       }
-
-      // 4. Decode transaction info (also verified implicitly if inside a verified payload?)
-      // Actually, verified payload contains raw jwt strings for signedTransactionInfo.
-      // We need to verify those too or just decode if we trust the container? 
-      // The library's `verifyAndDecodeNotification` returns `ResponseBodyV2DecodedPayload`.
-      // The `data.signedTransactionInfo` is still a JWT string.
-      // However, since the Notification JWT itself is signed by Apple, and contains the Transaction JWT,
-      // creating a chain of trust is good, but usually we verify the inner ones too using `verifyAndDecodeTransaction`.
-      // Let's be thorough.
 
       let transactionInfo: any = null;
       if (payload.data.signedTransactionInfo) {
@@ -101,13 +95,13 @@ export class AppStoreWebhookController {
 
       if (!transactionInfo) {
         this.logger.warn('Missing transaction info in verified payload');
-        return;
+        return { ok: true };
       }
 
       const { originalTransactionId, expiresDate, productId } = transactionInfo;
       this.logger.log(`Processing Verified Transaction: ${originalTransactionId} (${productId}) ${expiresDate}`);
 
-      // 5. Handle Notification Types
+      // Handle Notification Types
       await this.processNotification(
         payload.notificationType as string,
         payload.subtype as string | undefined,
@@ -115,11 +109,13 @@ export class AppStoreWebhookController {
         renewalInfo
       );
 
+      return { ok: true };
+
     } catch (e: any) {
       if (e instanceof VerificationException) {
         this.logger.error(`App Store Verification Failed: ${e.message}`, e.stack);
         // Do NOT throw. Return 200 to acknowledge receipt of invalid/fraudulent webhook.
-        return;
+        return { ok: true, warning: 'Verification failed' };
       }
 
       // For other errors (DB, logic), Rethrow to trigger Apple Retry
