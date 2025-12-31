@@ -144,6 +144,21 @@ type TaskCompletionNotification {
 
 scalar JSON
 
+type DietEntry {
+  id: ID!
+  date: String!
+  mealType: String!
+  recipeId: ID
+  nutrition: JSON!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DietMealStatus {
+  date: String!
+  meals: [String!]!
+}
+
 type Subscription {
   taskCompleted(userId: String): TaskCompletionNotification!
 }
@@ -192,6 +207,7 @@ type SubscriptionPlan {
 
 type BillingConfig {
   dailyUsageLimit: Int!
+  trialUsageLimit: Int!
 }
 
 input IngredientInput {
@@ -229,6 +245,12 @@ type Query {
   subscriptionPlans: [SubscriptionPlan!]!
   hello: String
   myTasks: [Task!]!
+  dietEntries(dateFrom: String!, dateTo: String!): [DietEntry!]!
+  dietEntriesByDate(date: String!): [DietEntry!]!
+  dietEntriesByMeal(date: String!, mealType: String!): [DietEntry!]!
+  dietNutritionByDate(date: String!): JSON!
+  dietNutritionByMeal(date: String!, mealType: String!): JSON!
+  dietMealStatus(dateFrom: String!, dateTo: String!): [DietMealStatus!]!
 }
 
 input IngredientRequirementInput {
@@ -256,7 +278,7 @@ type Mutation {
   removeIngredient(id: ID!): Boolean!
 
   generateRecipes(input: GenerateRecipeInput!, count: Int!): TaskResponse!
-  generateSurpriseRecipes(count: Int!, mealType: String): TaskResponse!
+  generateSurpriseRecipes(count: Int!, mealType: String, excludedDishes: [String!]): TaskResponse!
   addMissingToCart(recipeId: ID!): Cart!
 
   verifyAppStoreReceipt(receiptData: String!): Boolean!
@@ -267,4 +289,5 @@ type Mutation {
   removeFromFavorites(id: String!): Boolean!
   deleteRecipe(id: ID!): Boolean!
   completeTask(taskId: ID!): Boolean!
-}  
+  logRecipeNutrition(recipeId: ID!, date: String!, mealType: String!): DietEntry!
+}

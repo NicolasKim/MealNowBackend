@@ -2,9 +2,9 @@
   "quota": {
     "member_benefit": "会员权益消耗",
     "member_benefit_combo": "会员权益消耗 (组合)",
-    "trial": "试用额度消耗",
+    "trial": "试用Token消耗",
     "first_trial": "首次试用消耗",
-    "daily_limit_reached": "今日使用次数已达上限 ({limit}次/天)，请明天再来"
+    "daily_limit_reached": "今日Token已达上限 ({limit} Token/天)，请明天再来"
   },
   "subscription": {
     "app_store": "App Store 订阅: {plan}"

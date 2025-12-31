@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { InjectModel } from '@nestjs/mongoose'
+import { Model } from 'mongoose'
 import * as sharp from 'sharp'
 import axios from 'axios'
 import { randomUUID } from 'crypto'
 import { RedisService } from '../redis/redis.service'
 import { StorageService } from '../storage/storage.service'
+import { Recipe, RecipeDocument } from '../recipe/schemas/recipe.schema'
+import { NutrientDefinition, NutrientDefinitionDocument } from '../diet/schemas/nutrient-definition.schema'
 
 type Message = { role: 'user' | 'system' | 'assistant'; content: any }
 
@@ -23,9 +27,19 @@ const INGREDIENT_OUTPUT_STRUCTURE_EN = `{
     "estimatedExpireDate": "(number)Estimated days until expiration based on condition (number), return -1 if already expired"
 }`
 
+const NUTRITION_OUTPUT_STRUCTURE = `{
+  "totalCalories": 250,
+  "nutritionInfo": [
+    {
+      "type": "protein",
+      "amount": 20,
+      "unit": "g"
+    }
+  ]
+}`
+
 const RECIPE_OUTPUT_STRUCTURE = `{
   "title": "菜名",
-  "imageUrl": "可选图片URL，如果有",
   "type": "recommendation/special",
   "description": "简短描述（包含推荐理由）",
   "cookTimeMinutes": 30,
@@ -49,8 +63,39 @@ export class AiService {
   private key = process.env.OPENROUTER_API_KEY || ''
   constructor(
     private readonly redis: RedisService,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    @InjectModel(Recipe.name) private recipeModel: Model<RecipeDocument>,
+    @InjectModel(NutrientDefinition.name) private nutrientDefinitionModel: Model<NutrientDefinitionDocument>
   ) { }
+
+  private async getNutrientDefinitionsForPrompt(): Promise<Array<{ type: string; unit: string }>> {
+    const cacheKey = 'nutrition:nutrient_definitions:v1'
+    const cached = await this.redis.get().get(cacheKey)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((v: any) => ({ type: String(v?.type || ''), unit: String(v?.unit || '') }))
+            .filter((v: any) => v.type && v.unit)
+        }
+      } catch (e) { }
+    }
+
+    const rows = await this.nutrientDefinitionModel
+      .find({})
+      .select({ type: 1, unit: 1, _id: 0 })
+      .lean()
+      .exec()
+
+    const list = (rows as any[])
+      .map((r) => ({ type: String(r?.type || ''), unit: String(r?.unit || '') }))
+      .filter((v) => v.type && v.unit)
+      .sort((a, b) => a.type.localeCompare(b.type))
+
+    await this.redis.get().setex(cacheKey, 3600, JSON.stringify(list))
+    return list
+  }
 
   async chat(model: string, messages: Message[]) {
     const url = `${this.base}/chat/completions`
@@ -197,6 +242,7 @@ ${RECIPE_OUTPUT_STRUCTURE}`
     preference?: any
     count: number
     mealType?: string
+    excludedDishes?: string[]
   }, lang: string = 'zh') {
     const model = process.env.AI_MODEL_RECIPE || 'anthropic/claude-3.7-sonnet:thinking'
     // Don't cache surprise recipes as inventory changes frequently
@@ -211,6 +257,7 @@ ${RECIPE_OUTPUT_STRUCTURE}`
 1. **搭配**：合理搭配"新鲜食材"，充分利用"即将过期食材"。
 2. **偏好**：必须严格遵守用户的口味偏好（如辣度、禁忌等）。
 3. **补充**：如果食材不够可以适当推荐需要少量补充食材的菜谱。
+${payload.excludedDishes?.length ? `4. **排除**：请不要推荐以下菜品：${payload.excludedDishes.join(', ')}。` : ''}
 
 语言要求：
 请使用 ${lang === 'zh' ? '简体中文' : 'English'} 生成所有内容。
@@ -301,17 +348,29 @@ ${RECIPE_OUTPUT_STRUCTURE}`
 
         try {
           if (!imageUrl) {
-            this.logger.log(`Generating image for recipe: ${recipe.title}`)
-            const imagePrompt = `A delicious, professional food photography of ${recipe.title}, ${recipe.ingredients?.map((i: any) => i.name).join(', ')}. High resolution, appetizing lighting.`
-            const imageBuffer = await this.generateImage(imagePrompt)
+            // Check existing image by title to avoid duplicate generation
+            const existingRecipe = await this.recipeModel.findOne({
+              title: recipe.title,
+              imageUrl: { $exists: true, $ne: '' }
+            }).select('imageUrl').exec();
 
-            if (imageBuffer) {
-              const compressedBuffer = await sharp(imageBuffer)
-                .jpeg({ quality: 80 })
-                .toBuffer()
+            if (existingRecipe && existingRecipe.imageUrl) {
+              this.logger.log(`Found existing image for recipe: ${recipe.title}`);
+              imageUrl = existingRecipe.imageUrl;
+            } else {
+              this.logger.log(`Generating image for recipe: ${recipe.title}`)
+              const imagePrompt = `A delicious, professional food photography of ${recipe.title}, ${recipe.ingredients?.map((i: any) => i.name).join(', ')}. High resolution, appetizing lighting.`
+              const imageBuffer = await this.generateImage(imagePrompt)
 
-              const { url } = await this.storage.uploadBuffer(compressedBuffer, 'image/jpeg')
-              imageUrl = url
+              if (imageBuffer) {
+                const compressedBuffer = await sharp(imageBuffer)
+                  .jpeg({ quality: 80 })
+                  .toBuffer()
+
+                const { url } = await this.storage.uploadBuffer(compressedBuffer, 'image/jpeg')
+                imageUrl = url
+                // The URL will be saved when the recipe is saved by the caller
+              }
             }
           }
         } catch (err) {
@@ -371,6 +430,121 @@ ${RECIPE_OUTPUT_STRUCTURE}`
     } catch (e) {
       console.error('Failed to generate image', e)
       return null
+    }
+  }
+
+  async analyzeNutrition(ingredients: { name: string; amount: number; unit: string }[]): Promise<any> {
+    const model = process.env.AI_MODEL_NUTRITION || 'openai/gpt-4o-mini'
+    const nutrients = await this.getNutrientDefinitionsForPrompt()
+    const nutrientRules = nutrients.length
+      ? `- type must be one of: ${nutrients.map((n) => n.type).join(', ')}.
+- You MUST include ALL types above in the output. If a type is not applicable, still include it with amount set to 0.
+- unit must match each type:
+${nutrients.map((n) => `  - ${n.type}: ${n.unit}`).join('\n')}`
+      : ''
+    const systemPrompt = `You are a nutritionist assistant.
+Given an ingredient list (each with name, amount, unit), estimate the total nutrition for the entire list.
+
+Output requirements:
+- Return ONLY a single JSON object (no markdown, no code fences, no extra text).
+- The JSON must strictly match this structure (keys and nesting):
+${NUTRITION_OUTPUT_STRUCTURE}
+- Do not add extra keys.
+${nutrientRules ? `${nutrientRules}\n` : ''}
+- amount must be numbers.
+If you cannot estimate a value, use 0.`
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: JSON.stringify(ingredients) }
+    ]
+
+    const data = await this.chat(model, messages)
+    const content = data?.choices?.[0]?.message?.content
+    if (!content) return { totalCalories: 0, nutritionInfo: [] }
+
+    try {
+      const jsonStr = content.replace(/```json\n?|\n?```/g, '')
+      const parsed = JSON.parse(jsonStr)
+      //macronutrient：carbohydrate, protein, fat
+      //vitamins：vitamin_a, vitamin_d, vitamin_c, vitamin_e, vitamin_k, vitamin_b
+      //minerals：calcium, magnesium, sodium, phosphorus, iron, zinc, copper, manganese, salt
+      //fiber: fiber
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { totalCalories: 0, nutritionInfo: [] }
+
+      const nutritionInfo = (parsed as any).nutritionInfo
+      if (!Array.isArray(nutritionInfo)) {
+        return {
+          ...(parsed as any),
+          totalCalories: Number((parsed as any).totalCalories) || 0,
+          nutritionInfo: [],
+        }
+      }
+
+      const first = nutritionInfo[0]
+      const isAlreadyGrouped =
+        first &&
+        typeof first === 'object' &&
+        !Array.isArray(first) &&
+        typeof (first as any).category === 'string' &&
+        Array.isArray((first as any).nutritionInfo)
+
+      if (isAlreadyGrouped) {
+        return {
+          ...(parsed as any),
+          totalCalories: Number((parsed as any).totalCalories) || 0,
+        }
+      }
+
+      const typeToCategory: Record<string, 'macronutrient' | 'vitamins' | 'minerals' | 'fiber'> = {
+        carbohydrate: 'macronutrient',
+        protein: 'macronutrient',
+        fat: 'macronutrient',
+        vitamin_a: 'vitamins',
+        vitamin_d: 'vitamins',
+        vitamin_c: 'vitamins',
+        vitamin_e: 'vitamins',
+        vitamin_k: 'vitamins',
+        vitamin_b: 'vitamins',
+        calcium: 'minerals',
+        magnesium: 'minerals',
+        sodium: 'minerals',
+        phosphorus: 'minerals',
+        iron: 'minerals',
+        zinc: 'minerals',
+        copper: 'minerals',
+        manganese: 'minerals',
+        salt: 'minerals',
+        fiber: 'fiber',
+      }
+
+      const buckets: Record<'macronutrient' | 'vitamins' | 'minerals' | 'fiber', any[]> = {
+        macronutrient: [],
+        vitamins: [],
+        minerals: [],
+        fiber: [],
+      }
+
+      for (const item of nutritionInfo) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+        const type = String((item as any).type || '')
+        const category = typeToCategory[type] || 'macronutrient'
+        buckets[category].push(item)
+      }
+
+      return {
+        ...(parsed as any),
+        totalCalories: Number((parsed as any).totalCalories) || 0,
+        nutritionInfo: [
+          { category: 'macronutrient', nutritionInfo: buckets.macronutrient },
+          { category: 'vitamins', nutritionInfo: buckets.vitamins },
+          { category: 'minerals', nutritionInfo: buckets.minerals },
+          { category: 'fiber', nutritionInfo: buckets.fiber },
+        ],
+      }
+    } catch (e) {
+      this.logger.error('Failed to parse nutrition response', e)
+      return { totalCalories: 0, nutritionInfo: [] }
     }
   }
 }

@@ -21,6 +21,7 @@ import { AuthModule } from './modules/auth/auth.module'
 import { User, UserSchema } from './modules/auth/schemas/user.schema'
 import { TimezoneInterceptor } from './common/interceptors/timezone.interceptor'
 import { AcceptLanguageResolver, I18nModule, QueryResolver, HeaderResolver } from 'nestjs-i18n';
+import { DietModule } from './modules/diet/diet.module'
 
 @Module({
   imports: [
@@ -50,7 +51,17 @@ import { AcceptLanguageResolver, I18nModule, QueryResolver, HeaderResolver } fro
       typePaths: ['./src/graphql/*.graphql'],
       path: '/graphql',
       subscriptions: {
-        'graphql-ws': true
+        'graphql-ws': {
+          path: '/graphql',
+          onConnect: (context) => {
+            const { connectionParams, extra } = context;
+            console.log('WS: Client connected', connectionParams);
+            return true;
+          },
+          onDisconnect: () => {
+            console.log('WS: Client disconnected');
+          }
+        }
       }
     }),
     MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/cuisine'),
@@ -66,6 +77,7 @@ import { AcceptLanguageResolver, I18nModule, QueryResolver, HeaderResolver } fro
     ShoppingModule,
     PaymentModule,
     BillingModule,
+    DietModule,
     StorageModule,
     VisionModule
   ],

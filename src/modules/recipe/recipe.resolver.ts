@@ -209,6 +209,7 @@ export class RecipeResolver {
   async generateSurpriseRecipes(
     @Args('count') count: number,
     @Args('mealType', { nullable: true }) mealType: string,
+    @Args('excludedDishes', { nullable: true }) excludedDishes: string[],
     @CurrentUser() user: UserDocument,
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
@@ -264,6 +265,20 @@ export class RecipeResolver {
           tags: user.tastePreferences,
         };
 
+        // 4. Get recent recipes (last 7 days) to exclude
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const recentRecipes = await this.recipeModel.find({
+            userId: user._id,
+            createdAt: { $gte: sevenDaysAgo }
+        }).select('title').exec();
+        
+        const recentTitles = recentRecipes.map(r => r.title);
+        const allExcludedDishes = [...(excludedDishes || []), ...recentTitles];
+        // Deduplicate
+        const uniqueExcludedDishes = Array.from(new Set(allExcludedDishes));
+
         const taskId = new Types.ObjectId().toString();
         
         // Create task in Redis
@@ -276,7 +291,8 @@ export class RecipeResolver {
                     freshIngredients: fresh,
                     preference,
                     count,
-                    mealType
+                    mealType,
+                    excludedDishes: uniqueExcludedDishes
                 }, clientInfo.language);
             } catch (e) {
                 this.logger.error('AI Service call failed', e);

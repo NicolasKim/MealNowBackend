@@ -36,11 +36,16 @@ export class BillingService {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    return this.usageRecords.countDocuments({
+    const records = await this.usageRecords.find({
       userId,
       createdAt: { $gte: startOfDay },
       type: { $in: ['recognize_ingredients', 'generate_recipe', 'ingredient_recognition', 'recipe_generation'] },
-    });
+    }).select('type').lean();
+
+    return records.reduce((acc, record) => {
+      const cost = (record.type === 'recognize_ingredients' || record.type === 'ingredient_recognition') ? 2 : 1;
+      return acc + cost;
+    }, 0);
   }
 
   async getUserSubscription(userId: string) {
@@ -178,7 +183,8 @@ export class BillingService {
 
   async getBillingConfig() {
     return {
-      dailyUsageLimit: parseInt(process.env.DAILY_USAGE_LIMIT || '20', 10)
+      dailyUsageLimit: parseInt(process.env.DAILY_USAGE_LIMIT || '20', 10),
+      trialUsageLimit: parseInt(process.env.TRIAL_COUNT || '3', 10)
     };
   }
 
@@ -247,23 +253,6 @@ export class BillingService {
         const usageCount = await this.getTodayUsageCount(userId);
 
         if (usageCount >= DAILY_LIMIT) {
-          // Optimization: If action is 'generate_recipe', check if user just did 'recognize_ingredients' recently.
-          // If so, allow this generation as part of the previous action (Combo Deal).
-          if (action === 'generate_recipe') {
-             const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-             const lastAction = await this.usageRecords.findOne({
-               userId,
-               createdAt: { $gte: twoMinutesAgo },
-               type: 'recognize_ingredients'
-             }).sort({ createdAt: -1 });
-
-             if (lastAction) {
-               // Found a recent recognition, treat this generation as free follow-up
-               await this.recordUsage(userId, action, 0, this.i18n.t('billing.quota.member_benefit_combo', { lang, defaultValue: 'Member benefit (Combo)' }));
-               return true;
-             }
-          }
-
           const message = this.i18n.t('billing.quota.daily_limit_reached', { lang, args: { limit: DAILY_LIMIT } });
           throw new QuotaExceededError(message);
         }
