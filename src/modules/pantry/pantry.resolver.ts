@@ -25,7 +25,7 @@ export class PantryResolver {
     @CurrentUser() user: any,
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
-    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'recognize_ingredients');
+    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'recognize_ingredients', clientInfo.language);
     if (!hasQuota) {
       const message = this.i18n.t('recipe.errors.quota_exceeded', { lang: clientInfo.language });
       throw new QuotaExceededError(message);

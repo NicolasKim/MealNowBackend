@@ -257,7 +257,7 @@ export class BillingService {
           throw new QuotaExceededError(message);
         }
 
-        await this.recordUsage(userId, action, 0, this.i18n.t('billing.quota.member_benefit', { lang }))
+        await this.recordUsage(userId, action, -1, this.i18n.t('billing.quota.member_benefit', { lang }))
         return true
       }
     }
@@ -365,6 +365,6 @@ export class BillingService {
     );
 
     // Record usage/history
-    await this.recordUsage(userId, 'subscription_start', 0, this.i18n.t('billing.subscription.app_store', { args: { plan }, lang }));
+    // await this.recordUsage(userId, 'subscription_start', 0, this.i18n.t('billing.subscription.app_store', { args: { plan }, lang }));
   }
 }

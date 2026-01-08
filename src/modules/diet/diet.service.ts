@@ -179,7 +179,7 @@ export class DietService {
   async getNutritionByDate(userId: string, date: string) {
     const entries = await this.dietEntryModel.find({ user: userId, date }).lean().exec()
     const map = await this.getNutrientDefinitionMap()
-    const nutrition = await this.aggregateNutritionFromEntries(entries as any[], map)
+    const nutrition = await this.aggregateNutritionFromEntries(entries as any[])
     const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, 'zh', map)
     return this.groupNutritionInfoByCategory(enriched, map)
   }
@@ -187,7 +187,7 @@ export class DietService {
   async getNutritionByMeal(userId: string, date: string, mealType: string) {
     const entries = await this.dietEntryModel.find({ user: userId, date, mealType }).lean().exec()
     const map = await this.getNutrientDefinitionMap()
-    const nutrition = await this.aggregateNutritionFromEntries(entries as any[], map)
+    const nutrition = await this.aggregateNutritionFromEntries(entries as any[])
     const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, 'zh', map)
     return this.groupNutritionInfoByCategory(enriched, map)
   }
@@ -218,23 +218,7 @@ export class DietService {
     return out
   }
 
-  private async aggregateNutritionFromEntries(entries: any[], defMap?: Map<string, any>) {
-    const map = defMap ?? (await this.getNutrientDefinitionMap())
-    const getCategory = (type: string): 'macronutrient' | 'vitamins' | 'minerals' | 'fiber' => {
-      const categoryRaw = String(map.get(type)?.category || '')
-      if (
-        categoryRaw === 'macronutrient' ||
-        categoryRaw === 'vitamins' ||
-        categoryRaw === 'minerals' ||
-        categoryRaw === 'fiber'
-      ) {
-        return categoryRaw
-      }
-      if (type.startsWith('vitamin_')) return 'vitamins'
-      if (type === 'fiber') return 'fiber'
-      return 'minerals'
-    }
-
+  private async aggregateNutritionFromEntries(entries: any[]) {
     const totalsByType = new Map<
       string,
       {
@@ -287,26 +271,9 @@ export class DietService {
       }
     }
 
-    const buckets: Record<'macronutrient' | 'vitamins' | 'minerals' | 'fiber', any[]> = {
-      macronutrient: [],
-      vitamins: [],
-      minerals: [],
-      fiber: [],
-    }
-
-    for (const v of totalsByType.values()) {
-      const category = getCategory(v.type)
-      buckets[category].push(v)
-    }
-
     return {
       totalCalories,
-      nutritionInfo: [
-        { category: 'macronutrient', nutritionInfo: buckets.macronutrient },
-        { category: 'vitamins', nutritionInfo: buckets.vitamins },
-        { category: 'minerals', nutritionInfo: buckets.minerals },
-        { category: 'fiber', nutritionInfo: buckets.fiber },
-      ],
+      nutritionInfo: Array.from(totalsByType.values()),
     }
   }
 

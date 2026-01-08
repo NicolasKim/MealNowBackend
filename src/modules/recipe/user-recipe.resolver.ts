@@ -11,15 +11,30 @@ export class UserRecipeResolver {
   @ResolveField('savedRecipes')
   async getSavedRecipes(@Parent() user: UserDocument) {
     if (!user.savedRecipes || user.savedRecipes.length === 0) return [];
+    
     const recipes = await this.recipeModel.find({ _id: { $in: user.savedRecipes } });
+    
+    // Create a map for quick lookup
+    const recipeMap = new Map(recipes.map(r => [r._id.toString(), r]));
+    
+    // Reverse the savedRecipes IDs to get latest first (LIFO)
+    const reversedIds = [...user.savedRecipes].reverse();
+    
+    const orderedRecipes = [];
+    for (const id of reversedIds) {
+        const recipe = recipeMap.get(id.toString());
+        if (recipe) {
+            orderedRecipes.push(recipe);
+        }
+    }
+
     // Map _id to id
-    return recipes.map(r => {
+    return orderedRecipes.map(r => {
       const obj = r.toObject();
       return {
         ...obj,
         id: r._id.toString(),
         steps: obj.steps || [],
-        missing: obj.missing || [],
         ingredients: obj.ingredients || []
       };
     });

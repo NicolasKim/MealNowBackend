@@ -179,7 +179,7 @@ export class RecipeResolver {
     @CurrentClientInfo() clientInfo: ClientInfo
   ) {
     const lang = clientInfo.language;
-    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
+    const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe', lang)
     if (!hasQuota) {
       const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
       throw new QuotaExceededError(message);
@@ -224,14 +224,14 @@ export class RecipeResolver {
     }
 
     try {
-        const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe')
+        const hasQuota = await this.billing.checkAndConsumeQuota(String(user._id), 'generate_recipe', lang)
         if (!hasQuota) {
           const message = this.i18n.t('recipe.errors.quota_exceeded', { lang });
           throw new QuotaExceededError(message);
         }
 
         // 1. Get Pantry Items
-        const items = await this.pantryService.findAll(user._id.toString());
+        const items = await this.pantryService.findFresh(user._id.toString());
         
         // 2. Categorize Ingredients
         const now = new Date();
@@ -429,6 +429,41 @@ export class RecipeResolver {
       // Ensure createdAt is available
       createdAt: (r as any).createdAt
     }));
+  }
+
+  @Query('missingIngredients')
+  @UseGuards(JwtAuthGuard)
+  async missingIngredients(
+    @Args('recipeId') recipeId: string,
+    @CurrentUser() user: UserDocument,
+    @CurrentClientInfo() clientInfo: ClientInfo
+  ) {
+    const lang = clientInfo.language;
+
+    // 1. Get Recipe
+    const recipe = await this.recipeModel.findById(recipeId);
+    if (!recipe) {
+      throw new NotFoundException(this.i18n.t('recipe.errors.recipe_not_found', { lang }));
+    }
+
+    // 2. Get Fresh Pantry Items
+    const pantryItems = await this.pantryService.findFresh(user._id.toString());
+
+    // 3. Prepare data for AI
+    const recipeIngredients = recipe.ingredients?.map(i => ({
+      name: i.name,
+      amount: i.amount || i.quantity || 0,
+      unit: i.unit || ''
+    })) || [];
+
+    const pantryInventory = pantryItems.map(i => ({
+      name: i.name,
+      quantity: i.quantity,
+      unit: i.unit
+    }));
+
+    // 4. Calculate Missing
+    return this.ai.calculateMissingIngredients(recipeIngredients, pantryInventory, lang);
   }
 
   @Mutation('deleteRecipe')

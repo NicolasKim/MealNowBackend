@@ -49,12 +49,22 @@ const RECIPE_OUTPUT_STRUCTURE = `{
       { "name": "食材名", "amount": 100, "unit": "g" }
   ],
   "steps": [
-      { "order": 1, "instruction": "步骤说明" }
-  ],
-  "missing": [
-      { "name": "缺失食材名", "requiredAmount": 10, "unit": "g", "category": "分类" }
+      { 
+          "order": 1, 
+          "stepName": "步骤名称(如: 备菜, 炒制, 炖煮)", 
+          "instruction": "步骤说明",
+          "durationSeconds": "(number, optional) 仅长时步骤(如炖煮/腌制/烤箱)需提供预估耗时(秒)"
+      }
   ]
 }`
+
+const RECIPE_COMMON_RULES = `
+1. 必须生成已有的美食，可以在已有美食的基础上精简一些食材或者步骤，避免使用未知或不常见的食材。
+2. 食材名称必须是真实存在的，不能是虚构的或不存在的。
+3. 食材名称必须明确，不能是模糊的或不具体的（如："蔬菜"、"肉类"、"水果"、"海鲜"、"调料"等）。
+4. Recipe必须包含所有必要的步骤，不能缺少任何步骤。
+5. Recipe所必要的步骤必须尽可能简单，不能过于复杂。
+`
 
 @Injectable()
 export class AiService {
@@ -98,12 +108,14 @@ export class AiService {
   }
 
   async chat(model: string, messages: Message[]) {
+    console.log('ai_request', JSON.stringify(messages))
     const url = `${this.base}/chat/completions`
     const res = await axios.post(
       url,
       { model, messages },
       { headers: { Authorization: `Bearer ${this.key}` } }
     )
+    console.log('ai_response', JSON.stringify(res.data))
     return res.data
   }
 
@@ -213,6 +225,9 @@ Please return the JSON string directly, strictly forbidding Markdown format mark
     if (cached) return JSON.parse(cached)
     const systemPrompt = `你是一个专业的营养师和主厨AI。请根据用户提供的现有食材和偏好生成菜谱。
 
+必须遵循的规则前提：
+${RECIPE_COMMON_RULES}
+
 任务要求：
 请生成 ${payload.count} 个菜谱：
 1. 分析用户提供的 ingredients (现有食材) 和 preference (偏好)。
@@ -253,11 +268,14 @@ ${RECIPE_OUTPUT_STRUCTURE}`
         role: 'system',
         content: `你是一个创意大厨。请根据用户的现有食材和偏好${payload.mealType ? `为${payload.mealType}` : ''}生成创意食谱。
         
+必须遵循的规则前提：
+${RECIPE_COMMON_RULES}
+
 规则：
 1. **搭配**：合理搭配"新鲜食材"，充分利用"即将过期食材"。
 2. **偏好**：必须严格遵守用户的口味偏好（如辣度、禁忌等）。
 3. **补充**：如果食材不够可以适当推荐需要少量补充食材的菜谱。
-${payload.excludedDishes?.length ? `4. **排除**：请不要推荐以下菜品：${payload.excludedDishes.join(', ')}。` : ''}
+${payload.excludedDishes?.length ? `5. **排除**：请不要推荐以下菜品：${payload.excludedDishes.join(', ')}。` : ''}
 
 语言要求：
 请使用 ${lang === 'zh' ? '简体中文' : 'English'} 生成所有内容。
@@ -280,9 +298,9 @@ ${RECIPE_OUTPUT_STRUCTURE}
       }
     ]
 
-    console.log('generateSurpriseRecipes Input:', JSON.stringify(messages, null, 2));
+
     const data = await this.chat(model, messages)
-    console.log('generateSurpriseRecipes Output:', JSON.stringify(data, null, 2));
+
     return this.processAiResponse(data)
   }
 
@@ -303,6 +321,9 @@ ${RECIPE_OUTPUT_STRUCTURE}
 请生成 4 个菜谱：
 1. 3个 "推荐菜肴" (Pantry Match)：核心目标是"消耗库存"。请深度分析现有食材的组合可能性，生成高匹配度（matchRate > 60%）的实用家常菜肴，严格贴合用户口味偏好。对应 type 为 "recommendation"。
 2. 1个 "今日精选" (Chef's Choice)：核心目标是"美味探索"。不受限于现有食材，请根据用户的口味画像推荐一道极具吸引力的特色菜或创意料理，旨在提供新鲜感和美食灵感。对应 type 为 "special"。
+
+必须遵循的规则前提：
+${RECIPE_COMMON_RULES}
 
 优先级规则：
 1. **最高优先级**：必须尽可能多地使用"即将过期食材"（请参考食材的数量，尽可能消耗完）。
@@ -496,55 +517,83 @@ If you cannot estimate a value, use 0.`
         }
       }
 
-      const typeToCategory: Record<string, 'macronutrient' | 'vitamins' | 'minerals' | 'fiber'> = {
-        carbohydrate: 'macronutrient',
-        protein: 'macronutrient',
-        fat: 'macronutrient',
-        vitamin_a: 'vitamins',
-        vitamin_d: 'vitamins',
-        vitamin_c: 'vitamins',
-        vitamin_e: 'vitamins',
-        vitamin_k: 'vitamins',
-        vitamin_b: 'vitamins',
-        calcium: 'minerals',
-        magnesium: 'minerals',
-        sodium: 'minerals',
-        phosphorus: 'minerals',
-        iron: 'minerals',
-        zinc: 'minerals',
-        copper: 'minerals',
-        manganese: 'minerals',
-        salt: 'minerals',
-        fiber: 'fiber',
-      }
-
-      const buckets: Record<'macronutrient' | 'vitamins' | 'minerals' | 'fiber', any[]> = {
-        macronutrient: [],
-        vitamins: [],
-        minerals: [],
-        fiber: [],
-      }
-
-      for (const item of nutritionInfo) {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-        const type = String((item as any).type || '')
-        const category = typeToCategory[type] || 'macronutrient'
-        buckets[category].push(item)
-      }
-
       return {
         ...(parsed as any),
         totalCalories: Number((parsed as any).totalCalories) || 0,
-        nutritionInfo: [
-          { category: 'macronutrient', nutritionInfo: buckets.macronutrient },
-          { category: 'vitamins', nutritionInfo: buckets.vitamins },
-          { category: 'minerals', nutritionInfo: buckets.minerals },
-          { category: 'fiber', nutritionInfo: buckets.fiber },
-        ],
+        nutritionInfo,
       }
     } catch (e) {
       this.logger.error('Failed to parse nutrition response', e)
       return { totalCalories: 0, nutritionInfo: [] }
+    }
+  }
+
+  async calculateMissingIngredients(
+    recipeIngredients: { name: string; amount: number; unit: string }[],
+    pantryItems: { name: string; quantity: number; unit: string }[],
+    lang: string = 'zh'
+  ): Promise<{ name: string; requiredAmount: number; unit: string }[]> {
+    const model = process.env.AI_MODEL_MISSING_INGREDIENTS || 'qwen/qwen-2.5-vl-7b-instruct:free'
+
+    const systemPrompt = lang === 'zh'
+      ? `你是一个智能厨房助手。请对比"食谱所需食材"和"现有库存食材"，计算缺少的食材。
+      
+      规则：
+      1. 智能匹配食材名称（例如 "鸡蛋" 和 "土鸡蛋" 视为相同）。
+      2. 智能转换单位进行比较（例如 1kg = 1000g）。
+      3. 如果库存足够，则不列出。
+      4. 如果库存不足，计算缺少的量（所需量 - 库存量）。
+      5. 如果库存中没有该食材，则缺少的量 = 所需量。
+      6. 返回结果必须是一个 JSON 数组，不包含任何 Markdown 格式。
+      
+      返回结构：
+      [
+        { "name": "缺少的食材名", "requiredAmount": 100, "unit": "单位" }
+      ]`
+      : `You are a smart kitchen assistant. Please compare "Recipe Ingredients" and "Pantry Inventory" to calculate missing ingredients.
+      
+      Rules:
+      1. Match ingredient names intelligently (e.g., "Egg" and "Free-range Egg" are the same).
+      2. Convert units intelligently for comparison (e.g., 1kg = 1000g).
+      3. If inventory is sufficient, do not list it.
+      4. If inventory is insufficient, calculate the missing amount (Required - Inventory).
+      5. If the ingredient is not in inventory, missing amount = required amount.
+      6. Return a strict JSON array without Markdown formatting.
+      
+      Return Structure:
+      [
+        { "name": "Missing Ingredient Name", "requiredAmount": 100, "unit": "Unit" }
+      ]`
+
+    const userPrompt = JSON.stringify({
+      recipeIngredients,
+      pantryItems
+    });
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
+
+    const data = await this.chat(model, messages);
+    const content = data?.choices?.[0]?.message?.content;
+    
+    if (!content) return [];
+
+    try {
+      const jsonStr = content.replace(/```json\n?|\n?```/g, '');
+      const result = JSON.parse(jsonStr);
+      if (Array.isArray(result)) {
+        return result.map(item => ({
+          name: String(item.name),
+          requiredAmount: Number(item.requiredAmount) || 0,
+          unit: String(item.unit)
+        }));
+      }
+      return [];
+    } catch (e) {
+      this.logger.error('Failed to parse missing ingredients response', e);
+      return [];
     }
   }
 }

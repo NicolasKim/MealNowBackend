@@ -21,6 +21,18 @@ export class PantryService {
     return this.pantryModel.find({ user: userId }).sort({ createdAt: -1 }).exec();
   }
 
+  async findFresh(userId: string): Promise<PantryItem[]> {
+    const now = new Date();
+    return this.pantryModel.find({
+      user: userId,
+      $or: [
+        { expiryDate: { $gte: now } },
+        { expiryDate: null },
+        { expiryDate: { $exists: false } },
+      ],
+    }).sort({ createdAt: -1 }).exec();
+  }
+
   async addIngredient(userId: string, input: IngredientInput): Promise<PantryItem> {
     const now = new Date();
     // Try to find an existing valid (not expired) item with the same name and unit

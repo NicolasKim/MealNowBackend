@@ -25,21 +25,12 @@ class Step {
 
   @Prop()
   instruction!: string;
-}
-
-@Schema()
-class MissingIngredient {
-  @Prop({ required: true })
-  name!: string;
 
   @Prop()
-  requiredAmount?: number;
+  stepName?: string;
 
   @Prop()
-  unit?: string;
-
-  @Prop()
-  category?: string;
+  durationSeconds?: number;
 }
 
 @Schema({ timestamps: true })
@@ -76,9 +67,6 @@ export class Recipe {
 
   @Prop({ type: [SchemaFactory.createForClass(Step)] })
   steps?: Step[];
-
-  @Prop({ type: [SchemaFactory.createForClass(MissingIngredient)] })
-  missing?: MissingIngredient[];
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', index: true })
   userId?: string; // The user who saved this recipe

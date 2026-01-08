@@ -71,7 +71,6 @@ type Recipe {
   matchRate: Float!
   ingredients: [RecipeIngredient!]!
   steps: [RecipeStep!]!
-  missing: [IngredientRequirement!]!
   type: String
   description: String
   createdAt: DateTime
@@ -86,6 +85,8 @@ type RecipeIngredient {
 type RecipeStep {
   order: Int!
   instruction: String!
+  stepName: String
+  durationSeconds: Int
 }
 
 type IngredientRequirement {
@@ -251,6 +252,7 @@ type Query {
   dietNutritionByDate(date: String!): JSON!
   dietNutritionByMeal(date: String!, mealType: String!): JSON!
   dietMealStatus(dateFrom: String!, dateTo: String!): [DietMealStatus!]!
+  missingIngredients(recipeId: ID!): [IngredientRequirement!]!
 }
 
 input IngredientRequirementInput {

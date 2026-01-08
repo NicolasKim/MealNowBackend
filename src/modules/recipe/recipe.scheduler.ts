@@ -211,7 +211,7 @@ export class RecipeSchedulerService {
     await redis.set(lockKey, '1', 'EX', 60); // 60s lock
 
     try {
-        const pantryItems = await this.pantryService.findAll(userId);
+        const pantryItems = await this.pantryService.findFresh(userId);
         
         const now = new Date();
         const sevenDaysFromNow = new Date();
