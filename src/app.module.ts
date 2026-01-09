@@ -55,11 +55,21 @@ import { DietModule } from './modules/diet/diet.module'
           path: '/graphql',
           onConnect: (context) => {
             const { connectionParams, extra } = context;
-            console.log('WS: Client connected', connectionParams);
+            console.log('WS: Client connected', {
+              connectionParams,
+              extraKeys: extra ? Object.keys(extra as object) : []
+            });
             return true;
           },
-          onDisconnect: () => {
-            console.log('WS: Client disconnected');
+          onDisconnect: (context) => {
+             // NestJS wrapper or graphql-ws context might be different, keeping it simple
+             console.log('WS: Client disconnected');
+          },
+          onSubscribe: (context, msg) => {
+             console.log('WS: Client subscribed', {
+               operationName: msg.payload.operationName,
+               variables: msg.payload.variables
+             });
           }
         }
       }

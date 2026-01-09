@@ -28,6 +28,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client
   }
 
+  duplicate() {
+    return this.client.duplicate()
+  }
+
   async createTask(userId: string, taskId: string, type: string, name: string, metadata?: any) {
     const task = {
       id: taskId,
