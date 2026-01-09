@@ -12,7 +12,7 @@ import { NutrientDefinition, NutrientDefinitionDocument } from '../diet/schemas/
 type Message = { role: 'user' | 'system' | 'assistant'; content: any }
 
 const INGREDIENT_OUTPUT_STRUCTURE_ZH = `{
-    "name": "食材名称(简体中文)",
+    "name": "食材名称(简体中文), 水不作为食材",
     "quantity": "估计数量(number)",
     "unit": "单位(如:个,g,ml,根,袋,瓶 等)，注意不要用模糊的计量单位",
     "category": "分类(蔬菜/肉类/水果/海鲜/调料/其他)",
@@ -20,7 +20,7 @@ const INGREDIENT_OUTPUT_STRUCTURE_ZH = `{
 }`
 
 const INGREDIENT_OUTPUT_STRUCTURE_EN = `{
-    "name": "Ingredient name (English)",
+    "name": "Ingredient name (English), excluding water",
     "quantity": "Estimated quantity (number)",
     "unit": "Units (e.g., piece, g, ml, stalk, sachet, bottle, etc.). Avoid using vague or ambiguous measurement units.",
     "category": "Category (Vegetable/Meat/Fruit/Seafood/Seasoning/Other)",
@@ -51,9 +51,9 @@ const RECIPE_OUTPUT_STRUCTURE = `{
   "steps": [
       { 
           "order": 1, 
-          "stepName": "步骤名称(如: 备菜, 炒制, 炖煮)", 
+          "stepName": "步骤名称(只能是下面中的一个，慢煎、慢炸、卤制、发酵、熬制、泡发、炖煮、慢烤、烟熏、醒发、焖烧、腌制、熟成)", 
           "instruction": "步骤说明",
-          "durationSeconds": "(number, optional) 仅长时步骤(如炖煮/腌制/烤箱)需提供预估耗时(秒)"
+          "durationSeconds": "(number, optional) 仅长时步骤(慢煎、慢炸、卤制、发酵、熬制、泡发、炖煮、慢烤、烟熏、醒发、焖烧、腌制、熟成)需提供预估耗时(秒)"
       }
   ]
 }`
