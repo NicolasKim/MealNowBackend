@@ -6,7 +6,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client!: Redis
   private readonly logger = new Logger(RedisService.name)
 
-  onModuleInit() {
+  constructor() {
     const uri = process.env.REDIS_URI || 'redis://127.0.0.1:6379'
     this.logger.log(`Connecting to Redis...`)
     this.client = new Redis(uri)
@@ -18,6 +18,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.client.on('error', (err) => {
       this.logger.error('Redis connection failed:', err)
     })
+  }
+
+  onModuleInit() {
+    // Client initialized in constructor
   }
 
   onModuleDestroy() {
