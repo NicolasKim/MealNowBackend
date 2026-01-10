@@ -176,19 +176,19 @@ export class DietService {
     return enriched.map((e: any) => ({ ...e, id: e._id?.toString?.() ?? String(e._id) }))
   }
 
-  async getNutritionByDate(userId: string, date: string) {
+  async getNutritionByDate(userId: string, date: string, lang: string = 'zh') {
     const entries = await this.dietEntryModel.find({ user: userId, date }).lean().exec()
     const map = await this.getNutrientDefinitionMap()
     const nutrition = await this.aggregateNutritionFromEntries(entries as any[])
-    const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, 'zh', map)
+    const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, lang, map)
     return this.groupNutritionInfoByCategory(enriched, map)
   }
 
-  async getNutritionByMeal(userId: string, date: string, mealType: string) {
+  async getNutritionByMeal(userId: string, date: string, mealType: string, lang: string = 'zh') {
     const entries = await this.dietEntryModel.find({ user: userId, date, mealType }).lean().exec()
     const map = await this.getNutrientDefinitionMap()
     const nutrition = await this.aggregateNutritionFromEntries(entries as any[])
-    const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, 'zh', map)
+    const enriched = this.enrichNutritionWithSeedUsingMap(nutrition, lang, map)
     return this.groupNutritionInfoByCategory(enriched, map)
   }
 

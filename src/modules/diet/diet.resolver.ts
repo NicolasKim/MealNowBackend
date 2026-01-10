@@ -38,8 +38,12 @@ export class DietResolver {
 
   @Query('dietNutritionByDate')
   @UseGuards(JwtAuthGuard)
-  async dietNutritionByDate(@CurrentUser() user: UserDocument, @Args('date') date: string) {
-    return this.diet.getNutritionByDate(user._id.toString(), date)
+  async dietNutritionByDate(
+    @CurrentUser() user: UserDocument,
+    @Args('date') date: string,
+    @CurrentClientInfo() clientInfo: ClientInfo
+  ) {
+    return this.diet.getNutritionByDate(user._id.toString(), date, clientInfo.language)
   }
 
   @Query('dietNutritionByMeal')
@@ -47,9 +51,10 @@ export class DietResolver {
   async dietNutritionByMeal(
     @CurrentUser() user: UserDocument,
     @Args('date') date: string,
-    @Args('mealType') mealType: string
+    @Args('mealType') mealType: string,
+    @CurrentClientInfo() clientInfo: ClientInfo
   ) {
-    return this.diet.getNutritionByMeal(user._id.toString(), date, mealType)
+    return this.diet.getNutritionByMeal(user._id.toString(), date, mealType, clientInfo.language)
   }
 
   @Query('dietMealStatus')
