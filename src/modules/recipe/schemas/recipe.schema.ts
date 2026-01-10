@@ -67,9 +67,6 @@ export class Recipe {
 
   @Prop({ type: [SchemaFactory.createForClass(Step)] })
   steps?: Step[];
-
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', index: true })
-  userId?: string; // The user who saved this recipe
 }
 
 export const RecipeSchema = SchemaFactory.createForClass(Recipe);

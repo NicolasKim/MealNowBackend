@@ -55,13 +55,13 @@ export class RecipeResolver {
 
       // Store recipes in MongoDB
       const savedRecipes = [];
+      const generatedIds: string[] = [];
       for (const recipe of recipes) {
         const saved = await this.recipeModel.findByIdAndUpdate(
           recipe.id,
           {
             ...recipe,
             _id: recipe.id,
-            userId: user._id,
           },
           { new: true, upsert: true }
         );
@@ -71,7 +71,16 @@ export class RecipeResolver {
             ...saved.toObject(),
             id: saved._id.toString()
             });
+            generatedIds.push(saved._id.toString());
         }
+      }
+
+      // Update User's generated recipes
+      if (generatedIds.length > 0) {
+        const newEntries = generatedIds.map(id => ({ recipeId: id, addedAt: new Date() }));
+        await this.userModel.findByIdAndUpdate(user._id, {
+          $push: { generatedRecipes: { $each: newEntries } }
+        });
       }
 
       this.logger.log(`Task ${taskId} completed. Publishing to user ${user._id}`);
@@ -151,13 +160,13 @@ export class RecipeResolver {
     
     // Store recipes in MongoDB
     const savedRecipes = [];
+    const generatedIds: string[] = [];
     for (const recipe of recipes) {
       const saved = await this.recipeModel.findByIdAndUpdate(
         recipe.id,
         {
           ...recipe,
           _id: recipe.id,
-          userId: user._id,
         },
         { new: true, upsert: true }
       );
@@ -165,6 +174,14 @@ export class RecipeResolver {
         ...saved.toObject(),
         id: saved._id.toString()
       });
+      generatedIds.push(saved._id.toString());
+    }
+
+    if (generatedIds.length > 0) {
+        const newEntries = generatedIds.map(id => ({ recipeId: id, addedAt: new Date() }));
+        await this.userModel.findByIdAndUpdate(user._id, {
+          $push: { generatedRecipes: { $each: newEntries } }
+        });
     }
 
     return savedRecipes;
@@ -269,8 +286,12 @@ export class RecipeResolver {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
+        const generatedList = user.generatedRecipes || [];
+        // Extract IDs regardless of whether it's string[] (legacy) or object[] (new)
+        const recipeIds = generatedList.map((item: any) => typeof item === 'string' ? item : item.recipeId);
+
         const recentRecipes = await this.recipeModel.find({
-            userId: user._id,
+            _id: { $in: recipeIds },
             createdAt: { $gte: sevenDaysAgo }
         }).select('title').exec();
         
@@ -376,7 +397,6 @@ export class RecipeResolver {
             {
                 ...recipeData,
                 _id: id,
-                userId: user._id,
             },
             { new: true, upsert: true }
         );
@@ -387,8 +407,13 @@ export class RecipeResolver {
     }
 
     // 3. Update User's savedRecipes list
+    // Use $pull to remove if exists (to update timestamp) and then $push
     await this.userModel.findByIdAndUpdate(user._id, {
-      $addToSet: { savedRecipes: recipe._id }
+        $pull: { savedRecipes: { recipeId: recipe._id.toString() } }
+    });
+    
+    await this.userModel.findByIdAndUpdate(user._id, {
+        $push: { savedRecipes: { recipeId: recipe._id.toString(), addedAt: new Date() } }
     });
     
     return {
@@ -405,7 +430,7 @@ export class RecipeResolver {
   ) {
     const result = await this.userModel.findByIdAndUpdate(
       user._id,
-      { $pull: { savedRecipes: id } },
+      { $pull: { savedRecipes: { recipeId: id } } },
       { new: true }
     );
     return !!result;
@@ -418,17 +443,35 @@ export class RecipeResolver {
     @Args('offset') offset: number = 0,
     @CurrentUser() user: UserDocument
   ) {
-    const recipes = await this.recipeModel.find({ userId: user._id })
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit);
+    // Fallback to empty array if generatedRecipes is undefined
+    const generatedList = user.generatedRecipes || [];
     
-    return recipes.map(r => ({
-      ...r.toObject(),
-      id: r._id.toString(),
-      // Ensure createdAt is available
-      createdAt: (r as any).createdAt
-    }));
+    // 1. Sort by addedAt desc
+    // Handle both legacy string IDs and new object refs
+    const sortedList = [...generatedList].sort((a: any, b: any) => {
+        const timeA = a.addedAt ? new Date(a.addedAt).getTime() : 0;
+        const timeB = b.addedAt ? new Date(b.addedAt).getTime() : 0;
+        return timeB - timeA;
+    });
+
+    // 2. Pagination on the ID list first
+    const pagedList = sortedList.slice(offset, offset + limit);
+    const recipeIds = pagedList.map((item: any) => typeof item === 'string' ? item : item.recipeId);
+
+    // 3. Fetch Recipes
+    const recipes = await this.recipeModel.find({ _id: { $in: recipeIds } });
+    
+    // 4. Re-order to match the sorted ID list (MongoDB find doesn't guarantee order)
+    const recipeMap = new Map(recipes.map(r => [r._id.toString(), r]));
+    
+    return recipeIds
+        .map(id => recipeMap.get(id))
+        .filter(r => !!r) // Filter out nulls if any ID not found
+        .map(r => ({
+            ...r!.toObject(),
+            id: r!._id.toString(),
+            createdAt: (r as any).createdAt
+        }));
   }
 
   @Query('missingIngredients')
@@ -472,7 +515,12 @@ export class RecipeResolver {
     @Args('id') id: string,
     @CurrentUser() user: UserDocument
   ) {
-    const result = await this.recipeModel.deleteOne({ _id: id, userId: user._id });
-    return result.deletedCount > 0;
+    const result = await this.userModel.findByIdAndUpdate(user._id, {
+        $pull: { 
+            generatedRecipes: { recipeId: id },
+            savedRecipes: { recipeId: id }
+        }
+    });
+    return !!result;
   }
 }

@@ -9,6 +9,7 @@ import { ServeStaticModule } from '@nestjs/serve-static'
 import * as path from 'path'
 import { StorageModule } from './modules/storage/storage.module'
 import { VisionModule } from './modules/vision/vision.module'
+import { TemplateModule } from './modules/template/template.module'
 import { RecipeModule } from './modules/recipe/recipe.module'
 import { PantryModule } from './modules/pantry/pantry.module'
 import { PreferenceModule } from './modules/preference/preference.module'
@@ -89,7 +90,8 @@ import { DietModule } from './modules/diet/diet.module'
     BillingModule,
     DietModule,
     StorageModule,
-    VisionModule
+    VisionModule,
+    TemplateModule
   ],
   providers: [
     {

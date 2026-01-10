@@ -3,10 +3,20 @@ import { Document } from 'mongoose';
 
 export type UserDocument = User & Document;
 
+@Schema({ _id: false })
+export class UserRecipeRef {
+    @Prop({ type: String, ref: 'Recipe', required: true })
+    recipeId!: string;
+
+    @Prop({ default: Date.now })
+    addedAt!: Date;
+}
+
 @Schema({ timestamps: true })
 export class User {
     @Prop()
     phone?: string;
+
 
     @Prop()
     email?: string;
@@ -38,8 +48,11 @@ export class User {
     @Prop({ type: [String], default: [] })
     tastePreferences!: string[]; // Selected preference IDs
 
-    @Prop({ type: [{ type: String, ref: 'Recipe' }], default: [] })
-    savedRecipes!: string[]; // IDs of saved recipes
+    @Prop({ type: [SchemaFactory.createForClass(UserRecipeRef)], default: [] })
+    savedRecipes!: UserRecipeRef[]; // IDs of saved recipes
+
+    @Prop({ type: [SchemaFactory.createForClass(UserRecipeRef)], default: [] })
+    generatedRecipes!: UserRecipeRef[]; // IDs of generated recipes
 
     @Prop({ type: [String], default: [] })
     deviceTokens!: string[]; // APNs device tokens

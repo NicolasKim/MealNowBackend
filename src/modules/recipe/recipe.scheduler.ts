@@ -100,13 +100,6 @@ export class RecipeSchedulerService {
     }
   }
 
-  private async generateRecommendations(mealType: string) {
-    // Deprecated: Logic moved to handleHourlySchedule to support timezones
-    // Kept for manual trigger reference if needed, or can be removed.
-    // Re-implementing as a simple wrapper for manual testing if needed
-    // but for now, I'll remove the cron usage of it.
-  }
-
   async generatePublicRecommendations(mealType: string, lang: string = 'en', isScheduled: boolean = false) {
     const style = this.i18n.t(`recipe.meal_styles.${mealType}`, { lang, defaultValue: this.i18n.t(`recipe.meal_styles.dinner`, { lang }) });
     const today = new Date().toISOString().split('T')[0];
@@ -116,7 +109,17 @@ export class RecipeSchedulerService {
     // Check cache
     const redis = this.redisService.get();
     const cached = await redis.get(key);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+        const cachedData = JSON.parse(cached);
+        // Check if it's an array of IDs (strings)
+        if (Array.isArray(cachedData) && cachedData.length > 0 && typeof cachedData[0] === 'string') {
+            const recipes = await this.recipeModel.find({ _id: { $in: cachedData } });
+            // Preserve order if needed, but for now just return found recipes
+            return recipes.map(r => ({ ...r.toObject(), id: r._id.toString() }));
+        }
+        // Fallback for legacy cache (full objects)
+        return cachedData;
+    }
 
     // Try to acquire lock
     const acquired = await redis.set(lockKey, '1', 'EX', 60, 'NX');
@@ -131,7 +134,14 @@ export class RecipeSchedulerService {
     try {
         // Double check cache
         const doubleCheck = await redis.get(key);
-        if (doubleCheck) return JSON.parse(doubleCheck);
+        if (doubleCheck) {
+            const cachedData = JSON.parse(doubleCheck);
+            if (Array.isArray(cachedData) && cachedData.length > 0 && typeof cachedData[0] === 'string') {
+                const recipes = await this.recipeModel.find({ _id: { $in: cachedData } });
+                return recipes.map(r => ({ ...r.toObject(), id: r._id.toString() }));
+            }
+            return cachedData;
+        }
 
         this.logger.log(`Generating public ${mealType} recommendations for lang ${lang}...`);
         const recommendations = await this.aiService.generateDailyRecommendations({
@@ -143,9 +153,30 @@ export class RecipeSchedulerService {
         }, lang);
         
         if (recommendations && recommendations.length > 0) {
-            const content = JSON.stringify(recommendations);
-            await redis.setex(key, 86400, content);
-            return recommendations;
+            const savedIds: string[] = [];
+            const savedRecipes = [];
+
+            for (const recipe of recommendations) {
+                 const saved = await this.recipeModel.findByIdAndUpdate(
+                     recipe.id,
+                     {
+                         ...recipe,
+                         _id: recipe.id,
+                         mealType: mealType
+                     },
+                     { new: true, upsert: true }
+                 );
+                 if (saved) {
+                    savedIds.push(saved._id.toString());
+                    savedRecipes.push({ ...saved.toObject(), id: saved._id.toString() });
+                 }
+            }
+
+            if (savedIds.length > 0) {
+                const content = JSON.stringify(savedIds);
+                await redis.setex(key, 86400, content);
+                return savedRecipes;
+            }
         }
         return [];
     } catch (error) {
@@ -174,8 +205,12 @@ export class RecipeSchedulerService {
     const endOfDay = new Date();
     endOfDay.setUTCHours(23,59,59,999);
 
+    const generatedList = user.generatedRecipes || [];
+    // Extract IDs regardless of whether it's string[] (legacy) or object[] (new)
+    const recipeIds = generatedList.map((item: any) => typeof item === 'string' ? item : item.recipeId);
+
     const existing = await this.recipeModel.find({
-        userId: user._id,
+        _id: { $in: recipeIds },
         mealType: mealType,
         createdAt: { $gte: startOfDay, $lte: endOfDay }
     });
@@ -247,14 +282,22 @@ export class RecipeSchedulerService {
         
         if (recommendations && recommendations.length > 0) {
             const savedRecipes = [];
+            const generatedIds: string[] = [];
             for (const recipe of recommendations) {
                  const saved = await this.recipeModel.create({
                      ...recipe,
                      _id: recipe.id,
-                     userId: user._id,
                      mealType: mealType
                  });
                  savedRecipes.push({ ...saved.toObject(), id: saved._id.toString() });
+                 generatedIds.push(saved._id.toString());
+            }
+
+            if (generatedIds.length > 0) {
+                const newEntries = generatedIds.map(id => ({ recipeId: id, addedAt: new Date() }));
+                await this.userModel.findByIdAndUpdate(user._id, {
+                  $push: { generatedRecipes: { $each: newEntries } }
+                });
             }
 
             this.logger.log(`Generated ${mealType} recommendations for user ${userId}`);
