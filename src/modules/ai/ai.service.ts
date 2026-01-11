@@ -183,7 +183,7 @@ export class AiService {
   }, lang: string = 'zh') {
     const model = process.env.AI_MODEL_RECIPE || 'anthropic/claude-3.7-sonnet:thinking'
     
-    const systemPrompt = await this.templateService.renderFromFile('recipe-surprise.mustache', {
+    const systemPrompt = this.templateService.renderFromFile('recipe-surprise.mustache', {
       mealType: payload.mealType, // 可为 undefined
       excludedDishes: {
         length: (payload.excludedDishes?.length ?? 0) > 0,
@@ -225,7 +225,7 @@ export class AiService {
   }, lang: string = 'zh') {
     const model = process.env.AI_MODEL_RECIPE || 'anthropic/claude-3.5-sonnet'
 
-    const systemPrompt = await this.templateService.renderFromFile('recipe-daily-recommand.mustache', {
+    const systemPrompt = this.templateService.renderFromFile('recipe-daily-recommand.mustache', {
       mealType: payload.mealType,
       style: payload.style,
       language: lang === 'zh' ? '简体中文' : 'English'
