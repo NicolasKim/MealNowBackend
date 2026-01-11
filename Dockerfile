@@ -34,6 +34,7 @@ COPY --from=builder /app/src/graphql ./src/graphql
 COPY --from=builder /app/src/certs ./src/certs
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/resources ./resources
+COPY --from=builder /app/templates ./templates
 
 # Create uploads directory
 RUN mkdir -p uploads
