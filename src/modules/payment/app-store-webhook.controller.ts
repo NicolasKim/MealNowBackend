@@ -2,7 +2,7 @@ import { Controller, Post, Body, Logger, HttpCode, InternalServerErrorException 
 import { BillingService } from '../billing/billing.service';
 import * as fs from 'fs';
 import * as path from 'path';
-import { SignedDataVerifier, Environment, VerificationException } from '@apple/app-store-server-library';
+import { SignedDataVerifier, Environment, VerificationException, VerificationStatus } from '@apple/app-store-server-library';
 
 @Controller('webhooks/app-store')
 export class AppStoreWebhookController {
@@ -15,12 +15,13 @@ export class AppStoreWebhookController {
 
   private loadRootCertificates() {
     try {
-      const certDir = path.join(process.cwd(), 'src/certs');
+      // Use __dirname to locate certs relative to the compiled file, works for both src/ and dist/
+      const certDir = path.join(__dirname, '../../certs');
       const files = [
-        'AppleIncRootCertificate.pem',
-        'AppleComputerRootCertificate.pem',
-        'AppleRootCA-G2.pem',
-        'AppleRootCA-G3.pem'
+        'AppleIncRootCertificate.cer',
+        'AppleComputerRootCertificate.cer',
+        'AppleRootCA-G2.cer',
+        'AppleRootCA-G3.cer'
       ];
 
       this.rootCertificates = files.map(file => fs.readFileSync(path.join(certDir, file)));
@@ -30,26 +31,31 @@ export class AppStoreWebhookController {
     }
   }
 
-  @Post('sandbox')
-  @HttpCode(200)
-  async handleSandboxWebhook(@Body() body: any) {
-    return this.processWebhook(body, Environment.SANDBOX);
-  }
+  // @Post('sandbox')
+  // @HttpCode(200)
+  // async handleSandboxWebhook(@Body() body: any) {
+  //   return this.processWebhook(body, Environment.SANDBOX);
+  // }
 
-  @Post('production')
-  @HttpCode(200)
-  async handleProductionWebhook(@Body() body: any) {
-    return this.processWebhook(body, Environment.PRODUCTION);
-  }
+  // @Post('production')
+  // @HttpCode(200)
+  // async handleProductionWebhook(@Body() body: any) {
+  //   return this.processWebhook(body, Environment.PRODUCTION);
+  // }
 
   @Post()
   @HttpCode(200)
   async handleDefaultWebhook(@Body() body: any) {
-    this.logger.warn('Received webhook on default route. Treating as Production. Please update App Store Connect to use /production or /sandbox explicitly.');
-    return this.processWebhook(body, Environment.PRODUCTION);
+    
+    
+    // 根据环境变量自动判断环境
+    const environment = process.env.NODE_ENV === 'production' ? Environment.PRODUCTION : Environment.SANDBOX;
+    this.logger.log(`Received webhook on default route. Treating as ${environment}.`);
+    
+    return this.processWebhook(body, environment);
   }
 
-  private async processWebhook(body: any, environment: Environment) {
+  private async processWebhook(body: any, environment: Environment): Promise<any> {
     // Apple sends { signedPayload: "..." }
     if (!body.signedPayload) {
       this.logger.warn('Received webhook without signedPayload');
@@ -113,13 +119,16 @@ export class AppStoreWebhookController {
 
     } catch (e: any) {
       if (e instanceof VerificationException) {
-        this.logger.error(`App Store Verification Failed: ${e.message}`, e.stack);
+        this.logger.error(`App Store Verification Failed. Status: ${e.status}`);
+        if (e.cause) {
+          this.logger.error(`Cause: ${e.cause.message}`, e.cause.stack);
+        }
         // Do NOT throw. Return 200 to acknowledge receipt of invalid/fraudulent webhook.
-        return { ok: true, warning: 'Verification failed' };
+        return { ok: true, warning: `Verification failed: ${e.status}` };
       }
 
       // For other errors (DB, logic), Rethrow to trigger Apple Retry
-      this.logger.error('Error processing App Store webhook', e.message);
+      this.logger.error(`Error processing App Store webhook: ${e.message}`, e.stack);
       throw new InternalServerErrorException(e.message);
     }
   }

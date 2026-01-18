@@ -1,3 +1,4 @@
+
 scalar DateTime
 
 type UserSubscription {
@@ -31,6 +32,10 @@ type User {
   avatar: String
   language: String
   timezone: String
+  height: Float
+  weight: Float
+  specialPeriods: [String!]
+  chronicDiseases: [String!]
   tastePreferences: [String!]!
   savedRecipes: [Recipe!]!
   savedRecipesCount: Int!
@@ -155,13 +160,44 @@ type DietEntry {
   updatedAt: DateTime!
 }
 
+type NutrientDefinition {
+  nutritionId: Int!
+  name: JSON!
+  unit: String!
+  dailyValue: Float!
+}
+
 type DietMealStatus {
   date: String!
   meals: [String!]!
 }
 
+type NutrientLimit {
+  nutritionId: Int!
+  min: Float!
+  max: Float!
+  unit: String
+}
+
+type DietLimit {
+  user: User!
+  limits: [NutrientLimit!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DietGenerationProgress {
+  nutrient: Int
+  status: String!
+  message: String
+  step: Int
+  totalSteps: Int
+  result: NutrientLimit
+}
+
 type Subscription {
   taskCompleted(userId: String): TaskCompletionNotification!
+  dietLimitGenerationProgress: DietGenerationProgress!
 }
 
 type Task {
@@ -292,4 +328,5 @@ type Mutation {
   deleteRecipe(id: ID!): Boolean!
   completeTask(taskId: ID!): Boolean!
   logRecipeNutrition(recipeId: ID!, date: String!, mealType: String!): DietEntry!
+  generateDietLimits(input: UpdateProfileInput): [NutrientDefinition!]!
 }

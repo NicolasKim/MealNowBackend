@@ -26,6 +26,10 @@ input UpdateProfileInput {
   region: String
   avatar: String
   language: String
+  height: Float
+  weight: Float
+  specialPeriods: [String!]
+  chronicDiseases: [String!]
 }
 
 type Mutation {

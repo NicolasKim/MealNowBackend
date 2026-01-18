@@ -1,8 +1,19 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
 import { Document, Schema as MongooseSchema } from 'mongoose'
 import { User } from '../../auth/schemas/user.schema'
+import { NutrientDefinition } from '../../food/schemas/nutrient-definition.schema'
 
 export type DietEntryDocument = DietEntry & Document
+
+export class DietNutritionItem extends NutrientDefinition {
+  value!: number
+  
+  @Prop()
+  min?: number;
+
+  @Prop()
+  max?: number;
+}
 
 @Schema({ timestamps: true })
 export class DietEntry {
@@ -18,8 +29,8 @@ export class DietEntry {
   @Prop({ index: true })
   recipeId?: string
 
-  @Prop({ type: Object, required: true })
-  nutrition!: any
+  @Prop({ required: true })
+  nutritions!: DietNutritionItem[]
 }
 
 export const DietEntrySchema = SchemaFactory.createForClass(DietEntry)

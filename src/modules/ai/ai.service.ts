@@ -3,11 +3,12 @@ import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import * as sharp from 'sharp'
 import axios from 'axios'
+import { Pinecone } from '@pinecone-database/pinecone'
 import { randomUUID } from 'crypto'
 import { RedisService } from '../redis/redis.service'
 import { StorageService } from '../storage/storage.service'
 import { Recipe, RecipeDocument } from '../recipe/schemas/recipe.schema'
-import { NutrientDefinition, NutrientDefinitionDocument } from '../diet/schemas/nutrient-definition.schema'
+import { NutrientDefinition, NutrientDefinitionDocument } from '../food/schemas/nutrient-definition.schema'
 import { TemplateService } from '../template/template.service'
 
 type Message = { role: 'user' | 'system' | 'assistant'; content: any }
@@ -17,13 +18,21 @@ export class AiService {
   private readonly logger = new Logger(AiService.name)
   private base = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
   private key = process.env.OPENROUTER_API_KEY || ''
+  private pinecone: Pinecone | null = null
+
   constructor(
     private readonly redis: RedisService,
     private readonly storage: StorageService,
     private readonly templateService: TemplateService,
     @InjectModel(Recipe.name) private recipeModel: Model<RecipeDocument>,
     @InjectModel(NutrientDefinition.name) private nutrientDefinitionModel: Model<NutrientDefinitionDocument>
-  ) { }
+  ) {
+    if (process.env.PINECONE_API_KEY) {
+      this.pinecone = new Pinecone({
+        apiKey: process.env.PINECONE_API_KEY,
+      })
+    }
+  }
 
   private async getNutrientDefinitionsForPrompt(): Promise<Array<{ type: string; unit: string }>> {
     const cacheKey = 'nutrition:nutrient_definitions:v1'
@@ -55,15 +64,141 @@ export class AiService {
   }
 
   async chat(model: string, messages: Message[]) {
-    console.log('ai_request', JSON.stringify(messages))
+    console.log('ai_request',this.base, this.key, JSON.stringify(messages))
     const url = `${this.base}/chat/completions`
     const res = await axios.post(
       url,
       { model, messages },
-      { headers: { Authorization: `Bearer ${this.key}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${this.key}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'MealNow/1.0'
+        },
+      },
     )
     console.log('ai_response', JSON.stringify(res.data))
     return res.data
+  }
+
+  async createEmbedding(text: string): Promise<number[]> {
+    const model = process.env.AI_MODEL_EMBEDDING || 'text-embedding-3-small'
+    const url = `${this.base}/embeddings`
+    try {
+      const res = await axios.post(
+        url,
+        { model, input: text, dimensions: 1024 },
+        {
+          headers: {
+            Authorization: `Bearer ${this.key}`,
+            'HTTP-Referer': 'https://cuisine.app', // Required by OpenRouter for rankings
+            'X-Title': 'Cuisine', // Required by OpenRouter for rankings
+            'Content-Type': 'application/json',
+            'User-Agent': 'Cuisine/1.0',
+          },
+        },
+      )
+      return res.data?.data?.[0]?.embedding || []
+    } catch (e) {
+      this.logger.error('Failed to create embedding', e)
+      return []
+    }
+  }
+
+  async translateToEnglish(text: string): Promise<string> {
+    const model = process.env.AI_MODEL_TRANSLATION || 'openai/gpt-4o-mini'
+    const messages: Message[] = [
+      {
+        role: 'system',
+        content: 'You are a professional translator. Translate the following ingredient name to English. Only return the English name, no other text.'
+      },
+      {
+        role: 'user',
+        content: text
+      }
+    ]
+    const data = await this.chat(model, messages)
+    return data?.choices?.[0]?.message?.content?.trim() || text
+  }
+
+  async translateToChinese(text: string): Promise<string> {
+    const model = process.env.AI_MODEL_TRANSLATION || 'openai/gpt-4o-mini'
+    const messages: Message[] = [
+      {
+        role: 'system',
+        content: 'You are a professional translator. Translate the following ingredient name to Simplified Chinese. Only return the Chinese name, no other text.'
+      },
+      {
+        role: 'user',
+        content: text
+      }
+    ]
+    const data = await this.chat(model, messages)
+    return data?.choices?.[0]?.message?.content?.trim() || text
+  }
+
+  async queryVectors(vector: number[], topK: number = 1, minScore: number = 0.85, indexNameStr?: string) {
+    if (!this.pinecone) {
+      this.logger.warn('Pinecone client not initialized')
+      return []
+    }
+    const indexName = indexNameStr || process.env.PINECONE_INDEX || 'ingredients'
+    try {
+      const index = this.pinecone.index(indexName)
+      const queryResponse = await index.query({
+        vector,
+        topK,
+        includeMetadata: true,
+      })
+
+      return queryResponse.matches
+        .filter((match: any) => (match.score || 0) >= minScore)
+    } catch (e) {
+      this.logger.error('Failed to query Pinecone', e)
+      return []
+    }
+  }
+
+  async fetchVector(id: string, indexNameStr?: string) {
+    if (!this.pinecone) {
+      this.logger.warn('Pinecone client not initialized')
+      return null
+    }
+    const indexName = indexNameStr || process.env.PINECONE_INDEX || 'ingredients'
+    try {
+      const index = this.pinecone.index(indexName)
+      const result = await index.fetch([id])
+      if (result.records && result.records[id]) {
+        return result.records[id]
+      }
+      return null
+    } catch (e) {
+      this.logger.error('Failed to fetch from Pinecone', e)
+      return null
+    }
+  }
+
+  async upsertVector(id: string | undefined | null, vector: number[], metadata: Record<string, any>, indexNameStr?: string) {
+    if (!this.pinecone) {
+      this.logger.warn('Pinecone client not initialized')
+      return
+    }
+    const indexName = indexNameStr || process.env.PINECONE_INDEX || 'ingredients'
+    const finalId = id || randomUUID()
+
+    try {
+      const index = this.pinecone.index(indexName)
+      await index.upsert([
+        {
+          id: finalId,
+          values: vector,
+          metadata
+        }
+      ])
+      this.logger.log(`Upserted vector to ${indexName}: ${finalId}`)
+    } catch (e: any) {
+      this.logger.error(`Failed to upsert to Pinecone: ${e.message}`, e.response?.data || e)
+    }
   }
 
   async recognizeIngredientsFromImage(imageUrl: string, lang: string = 'zh') {
@@ -249,6 +384,50 @@ export class AiService {
     return this.processAiResponse(data)
   }
 
+  async generateDietLimits(profile: {
+    height?: number
+    weight?: number
+    gender?: string
+    specialPeriods?: string[]
+    chronicDiseases?: string[]
+    age?: number // Optional if we had DOB
+  }, nutrients: { name: string; unit: string }[], lang: string = 'zh') {
+    const model = process.env.AI_MODEL_DIET_LIMIT || 'anthropic/claude-3.5-sonnet'
+
+    const nutrientListStr = nutrients.map(n => `- ${n.name} (${n.unit})`).join('\n');
+
+    const systemPrompt = `You are a professional nutritionist.
+    Generate daily nutrient intake limits (min and max) for a user based on their profile.
+    Output must be a JSON array of objects with keys: "nutrient" (exact name from the list below), "min" (number), "max" (number).
+    
+    Target Nutrients:
+    ${nutrientListStr}
+
+    IMPORTANT: The values for "min" and "max" MUST strictly correspond to the units specified in parentheses above. Do not convert units (e.g. if unit is 'g', do not output 'mg').
+
+    For special periods (pregnancy, etc.) or diseases, adjust the values accordingly.
+    Only return the JSON array, no other text.`
+
+    const userPrompt = JSON.stringify(profile)
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]
+
+    const data = await this.chat(model, messages)
+    const content = data?.choices?.[0]?.message?.content
+    
+    if (!content) return []
+    try {
+      const result = this.parseJsonFromContent(content)
+      return Array.isArray(result) ? result : []
+    } catch (e) {
+      this.logger.error('Failed to parse diet limits', e)
+      return []
+    }
+  }
+
   private async processAiResponse(data: any): Promise<any[]> {
     const text = data?.choices?.[0]?.message?.content || '[]'
     try {
@@ -347,66 +526,66 @@ export class AiService {
     }
   }
 
-  async analyzeNutrition(ingredients: { name: string; amount: number; unit: string }[]): Promise<any> {
-    const model = process.env.AI_MODEL_NUTRITION || 'openai/gpt-4o-mini'
-    const nutrients = await this.getNutrientDefinitionsForPrompt()
+  // async analyzeNutrition(ingredients: { name: string; amount: number; unit: string }[]): Promise<any> {
+  //   const model = process.env.AI_MODEL_NUTRITION || 'openai/gpt-4o-mini'
+  //   const nutrients = await this.getNutrientDefinitionsForPrompt()
     
-    const systemPrompt = this.templateService.renderFromFile('nutrition-recognition.mustache', {
-      types: nutrients.map((n) => n.type).join(', '),
-      units: nutrients.map((n) => `  - ${n.type}: ${n.unit}`).join('\n')
-    })
+  //   const systemPrompt = this.templateService.renderFromFile('nutrition-recognition.mustache', {
+  //     types: nutrients.map((n) => n.type).join(', '),
+  //     units: nutrients.map((n) => `  - ${n.type}: ${n.unit}`).join('\n')
+  //   })
 
-    const messages: Message[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: JSON.stringify(ingredients) }
-    ]
+  //   const messages: Message[] = [
+  //     { role: 'system', content: systemPrompt },
+  //     { role: 'user', content: JSON.stringify(ingredients) }
+  //   ]
 
-    const data = await this.chat(model, messages)
-    const content = data?.choices?.[0]?.message?.content
-    if (!content) return { totalCalories: 0, nutritionInfo: [] }
+  //   const data = await this.chat(model, messages)
+  //   const content = data?.choices?.[0]?.message?.content
+  //   if (!content) return { totalCalories: 0, nutritionInfo: [] }
 
-    try {
-      const parsed = this.parseJsonFromContent(content)
-      //macronutrient：carbohydrate, protein, fat
-      //vitamins：vitamin_a, vitamin_d, vitamin_c, vitamin_e, vitamin_k, vitamin_b
-      //minerals：calcium, magnesium, sodium, phosphorus, iron, zinc, copper, manganese, salt
-      //fiber: fiber
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { totalCalories: 0, nutritionInfo: [] }
+  //   try {
+  //     const parsed = this.parseJsonFromContent(content)
+  //     //macronutrient：carbohydrate, protein, fat
+  //     //vitamins：vitamin_a, vitamin_d, vitamin_c, vitamin_e, vitamin_k, vitamin_b
+  //     //minerals：calcium, magnesium, sodium, phosphorus, iron, zinc, copper, manganese, salt
+  //     //fiber: fiber
+  //     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { totalCalories: 0, nutritionInfo: [] }
 
-      const nutritionInfo = (parsed as any).nutritionInfo
-      if (!Array.isArray(nutritionInfo)) {
-        return {
-          ...(parsed as any),
-          totalCalories: Number((parsed as any).totalCalories) || 0,
-          nutritionInfo: [],
-        }
-      }
+  //     const nutritionInfo = (parsed as any).nutritionInfo
+  //     if (!Array.isArray(nutritionInfo)) {
+  //       return {
+  //         ...(parsed as any),
+  //         totalCalories: Number((parsed as any).totalCalories) || 0,
+  //         nutritionInfo: [],
+  //       }
+  //     }
 
-      const first = nutritionInfo[0]
-      const isAlreadyGrouped =
-        first &&
-        typeof first === 'object' &&
-        !Array.isArray(first) &&
-        typeof (first as any).category === 'string' &&
-        Array.isArray((first as any).nutritionInfo)
+  //     const first = nutritionInfo[0]
+  //     const isAlreadyGrouped =
+  //       first &&
+  //       typeof first === 'object' &&
+  //       !Array.isArray(first) &&
+  //       typeof (first as any).category === 'string' &&
+  //       Array.isArray((first as any).nutritionInfo)
 
-      if (isAlreadyGrouped) {
-        return {
-          ...(parsed as any),
-          totalCalories: Number((parsed as any).totalCalories) || 0,
-        }
-      }
+  //     if (isAlreadyGrouped) {
+  //       return {
+  //         ...(parsed as any),
+  //         totalCalories: Number((parsed as any).totalCalories) || 0,
+  //       }
+  //     }
 
-      return {
-        ...(parsed as any),
-        totalCalories: Number((parsed as any).totalCalories) || 0,
-        nutritionInfo,
-      }
-    } catch (e) {
-      this.logger.error('Failed to parse nutrition response', e)
-      return { totalCalories: 0, nutritionInfo: [] }
-    }
-  }
+  //     return {
+  //       ...(parsed as any),
+  //       totalCalories: Number((parsed as any).totalCalories) || 0,
+  //       nutritionInfo,
+  //     }
+  //   } catch (e) {
+  //     this.logger.error('Failed to parse nutrition response', e)
+  //     return { totalCalories: 0, nutritionInfo: [] }
+  //   }
+  // }
 
   async calculateMissingIngredients(
     recipeIngredients: { name: string; amount: number; unit: string }[],

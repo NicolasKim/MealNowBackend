@@ -23,6 +23,7 @@ import { User, UserSchema } from './modules/auth/schemas/user.schema'
 import { TimezoneInterceptor } from './common/interceptors/timezone.interceptor'
 import { AcceptLanguageResolver, I18nModule, QueryResolver, HeaderResolver } from 'nestjs-i18n';
 import { DietModule } from './modules/diet/diet.module'
+import { FoodModule } from './modules/food/food.module'
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { DietModule } from './modules/diet/diet.module'
     PaymentModule,
     BillingModule,
     DietModule,
+    FoodModule,
     StorageModule,
     VisionModule,
     TemplateModule

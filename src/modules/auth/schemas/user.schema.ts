@@ -45,6 +45,18 @@ export class User {
     @Prop()
     avatar?: string;
 
+    @Prop({ type: Number })
+    height?: number; // cm
+
+    @Prop({ type: Number })
+    weight?: number; // kg
+
+    @Prop({ type: [String], default: [] })
+    specialPeriods!: string[]; // e.g. pregnancy, lactation
+
+    @Prop({ type: [String], default: [] })
+    chronicDiseases!: string[]; // e.g. diabetes
+
     @Prop({ type: [String], default: [] })
     tastePreferences!: string[]; // Selected preference IDs
 

@@ -316,7 +316,7 @@ export class RecipeResolver {
                     excludedDishes: uniqueExcludedDishes
                 }, clientInfo.language);
             } catch (e) {
-                this.logger.error('AI Service call failed', e);
+                this.logger.error('AI Service call failed', JSON.stringify(e));
                 throw new Error(this.i18n.t('recipe.errors.ai_service_unavailable', { lang }));
             } finally {
                 await redis.del(lockKey);

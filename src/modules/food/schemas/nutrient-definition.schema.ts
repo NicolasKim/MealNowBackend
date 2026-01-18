@@ -5,14 +5,11 @@ export type NutrientDefinitionDocument = NutrientDefinition & Document
 
 export type LocalizedText = Record<string, string>
 
-export type NutrientBenefits = {
-  efficacy: LocalizedText
-  deficiency: LocalizedText
-  excess: LocalizedText
-}
-
 @Schema({ timestamps: true })
 export class NutrientDefinition {
+  @Prop({ required: true, unique: true, index: true })
+  nutritionId!: number
+
   @Prop({ required: true, unique: true, index: true })
   type!: string
 
@@ -29,19 +26,13 @@ export class NutrientDefinition {
   categoryName!: LocalizedText
 
   @Prop({ type: Object, required: true })
-  name!: Record<string, string>
-
-  @Prop({ type: Object, required: true })
-  benefits!: NutrientBenefits
+  name!: LocalizedText
 
   @Prop({ required: true })
   unit!: string
 
   @Prop({ required: true })
-  lowerRecommendedIntake!: number
-
-  @Prop({ required: true })
-  upperRecommendedIntake!: number
+  dailyValue!: number
 }
 
 export const NutrientDefinitionSchema = SchemaFactory.createForClass(NutrientDefinition)
