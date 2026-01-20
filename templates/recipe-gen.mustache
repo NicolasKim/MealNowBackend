@@ -11,7 +11,9 @@
      正确示例：鸡蛋、西红柿、鸡胸肉、北豆腐、牛胸肉、猪腿肉、鲈鱼
      错误示例：蔬菜、肉类、水果、海鲜、调料、鱼、牛肉、猪肉
    * **amount 必须为数字**
-   * **unit 必须为标准单位**（g、ml、个、张、勺等）
+   * **unit 必须为标准单位**，且**尽可能使用 "g"（克）**，仅在无法使用重量单位时使用其他单位（如：ml、个、勺等）
+   * **preciseAmount 必须为数字**，代表转换为克(g)后的数值
+   * **preciseUnit 必须为 "g"**
 3. **步骤完整**：每个 Recipe 必须包含所有必要步骤，不能缺少关键步骤。
 4. **字段完整**：输出 JSON 对象必须包含模板中所有字段，不允许缺失。
 
@@ -80,7 +82,7 @@
   "difficulty": "Easy/Medium/Hard",
   "matchRate": 85.5,
   "ingredients": [
-    { "name": "食材名", "amount": 100, "unit": "g" }
+    { "name": "食材名", "amount": 100, "unit": "g", "preciseAmount": 100, "preciseUnit": "g" }
   ],
   "steps": [
     {

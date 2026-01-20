@@ -94,7 +94,9 @@
 4. ingredients 规则
 
 * amount 必须为数字
-* unit 必须为明确单位（g / ml / 个 / 张 / 勺 等）
+* unit 必须为明确单位，且**尽可能使用 "g"（克）**，仅在无法使用重量单位时使用其他单位（如：ml、个、勺等）
+* preciseAmount 必须为数字，代表转换为克(g)后的数值
+* preciseUnit 必须为 "g"
 * ingredients 数组至少包含 1 个食材
 
 5. steps 规则（重要更新版）
@@ -162,7 +164,9 @@
         {
             "name": "食材名",
             "amount": 100,
-            "unit": "g"
+            "unit": "g",
+            "preciseAmount": 100,
+            "preciseUnit": "g"
         }
     ],
     "steps":

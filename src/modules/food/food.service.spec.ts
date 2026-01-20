@@ -37,6 +37,12 @@ describe('FoodService', () => {
     find: jest.fn(),
   };
 
+  const mockQuery = {
+    sort: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: jest.fn(),
+  };
+
   const mockIngredientModel = {
     findOne: jest.fn(),
     findOneAndUpdate: jest.fn(),
@@ -73,6 +79,8 @@ describe('FoodService', () => {
     
     // Mock environment variable
     process.env.USDA_API_KEY = 'test-api-key';
+    
+    mockNutrientDefinitionModel.find.mockReturnValue(mockQuery);
   });
 
   afterEach(() => {
@@ -136,7 +144,9 @@ describe('FoodService', () => {
       (axios.post as jest.Mock).mockResolvedValue(usdaResponse);
       
       // Mock valid nutrient IDs
-      mockRedisClient.get.mockResolvedValue(JSON.stringify([1003]));
+      mockQuery.exec.mockResolvedValue([
+          { nutritionIds: [1003], type: 'protein' }
+      ]);
       mockIngredientModel.findOneAndUpdate.mockReturnValue({
         exec: jest.fn().mockResolvedValue({})
       });
@@ -169,7 +179,7 @@ describe('FoodService', () => {
           }
         };
         (axios.post as jest.Mock).mockResolvedValue(usdaResponse);
-        mockRedisClient.get.mockResolvedValue(JSON.stringify([]));
+        mockQuery.exec.mockResolvedValue([]);
         mockIngredientModel.findOneAndUpdate.mockReturnValue({
             exec: jest.fn().mockResolvedValue({})
         });

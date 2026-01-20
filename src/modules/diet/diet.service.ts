@@ -6,6 +6,7 @@ import { PUB_SUB } from '../../common/pubsub.module'
 import { AiService } from '../ai/ai.service'
 import { RedisService } from '../redis/redis.service'
 import { Recipe } from '../recipe/schemas/recipe.schema'
+import { RecipeService } from '../recipe/recipe.service'
 import { DietEntry, DietEntryDocument, DietNutritionItem } from './schemas/diet-entry.schema'
 import { DietLimit, DietLimitDocument } from './schemas/diet-limit.schema'
 import { User, UserDocument } from '../auth/schemas/user.schema'
@@ -17,7 +18,7 @@ import { FoodService } from '../food/food.service'
 export class DietService {
   constructor(
     @InjectModel(DietEntry.name) private readonly dietEntryModel: Model<DietEntryDocument>,
-    @InjectModel(Recipe.name) private readonly recipeModel: Model<Recipe>,
+    private readonly recipeService: RecipeService,
     @InjectModel(DietLimit.name) private readonly dietLimitModel: Model<DietLimitDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @Inject(PUB_SUB) private readonly pubSub: RedisPubSub,
@@ -61,10 +62,10 @@ export class DietService {
 
     // 3. Process Each Nutrient
     const finalLimits: any[] = []
-    const defMap = new Map<string, number>()
+    const defMap = new Map<string, string>()
     nutrientDefs.forEach(d => {
-       defMap.set(d.name['en']?.toLowerCase(), d.nutritionId)
-       defMap.set(d.type.toLowerCase(), d.nutritionId) 
+       defMap.set(d.name['en']?.toLowerCase(), d.type)
+       defMap.set(d.type.toLowerCase(), d.type) 
     })
 
     // Start async generation in background
@@ -92,13 +93,13 @@ export class DietService {
        // Publish Processing status
        await this.pubSub.publish('dietLimitGenerationProgress', {
           dietLimitGenerationProgress: { 
-            nutrient: nutrientDef.nutritionId, 
+            nutrient: nutrientDef.type, 
             status: 'PROCESSING', 
             message: `Generating limit for ${nutrientName}`,
             step: step + 1, 
             totalSteps,
             result: {
-                nutritionId: nutrientDef.nutritionId,
+                type: nutrientDef.type,
                 min: 0,
                 max: 0,
                 unit: nutrientUnit
@@ -119,10 +120,9 @@ export class DietService {
          // Process result
          if (aiResult && aiResult.length > 0) {
             const l = aiResult[0];
-            const id = nutrientDef.nutritionId;
             
             const limitResult = {
-              nutritionId: id,
+              type: nutrientDef.type,
               min: l.min,
               max: l.max,
               unit: nutrientUnit
@@ -132,7 +132,7 @@ export class DietService {
 
             await this.pubSub.publish('dietLimitGenerationProgress', {
               dietLimitGenerationProgress: { 
-                nutrient: nutrientDef.nutritionId, 
+                nutrient: nutrientDef.type, 
                 status: 'COMPLETED', 
                 message: `Generated limit for ${nutrientName}`,
                 step: step + 1, 
@@ -147,7 +147,7 @@ export class DietService {
          console.error(`Failed to generate limit for ${nutrientName}`, e);
          await this.pubSub.publish('dietLimitGenerationProgress', {
             dietLimitGenerationProgress: { 
-              nutrient: nutrientDef.nutritionId, 
+              nutrient: nutrientDef.type, 
               status: 'FAILED', 
               message: `Failed: ${e.message}`,
               step: step + 1, 
@@ -172,41 +172,41 @@ export class DietService {
   }
 
   private async aggregateNutrition(entries: DietEntryDocument[], userId?: string): Promise<DietNutritionItem[]> {
-    const nutrientTotals = new Map<number, { def: NutrientDefinition; value: number }>()
+    const nutrientTotals = new Map<string, { def: NutrientDefinition; value: number }>()
 
     const allDefs = await this.foodService.getAllNutrientDefinitions()
-    const defMap = new Map<number, NutrientDefinition>()
+    const defMap = new Map<string, NutrientDefinition>()
     for (const d of allDefs) {
-      defMap.set(d.nutritionId, d)
+      defMap.set(d.type, d)
     }
 
     for (const entry of entries) {
       if (!entry.nutritions) continue
       for (const item of entry.nutritions) {
-        const def = defMap.get(item.nutritionId)
+        const def = defMap.get(item.type)
         if (!def) continue
 
-        if (nutrientTotals.has(item.nutritionId)) {
-          nutrientTotals.get(item.nutritionId)!.value += item.value
+        if (nutrientTotals.has(item.type)) {
+          nutrientTotals.get(item.type)!.value += item.value
         } else {
-          nutrientTotals.set(item.nutritionId, { def, value: item.value })
+          nutrientTotals.set(item.type, { def, value: item.value })
         }
       }
     }
 
     // Load limits if userId is provided
-    let userLimits = new Map<number, { min: number; max: number }>();
+    let userLimits = new Map<string, { min: number; max: number }>();
     if (userId) {
         const limits = await this.dietLimitModel.findOne({ user: userId }).lean().exec();
         if (limits && limits.limits) {
             limits.limits.forEach(l => {
-                userLimits.set(l.nutritionId, { min: l.min, max: l.max });
+                userLimits.set(l.type, { min: l.min, max: l.max });
             });
         }
     }
 
     const nutritions = Array.from(nutrientTotals.values()).map(({ def, value }) => {
-      const limit = userLimits.get(def.nutritionId);
+      const limit = userLimits.get(def.type);
       return {
         ...def,
         value,
@@ -270,8 +270,7 @@ export class DietService {
   ): Promise<DietEntryDocument> {
 
 
-    const recipe = await this.recipeModel.findById(recipeId).exec()
-    if (!recipe) throw new NotFoundException('Recipe not found')
+    const recipe = await this.recipeService.getRecipeById(recipeId)
     let ingredients = recipe.ingredients || []
     
     // Get standardized ingredient info
@@ -286,24 +285,44 @@ export class DietService {
 
     const results = await Promise.all(foodPromises);
     const nutrients = await this.foodService.getAllNutrientDefinitions()
-    const nutrientTotals = new Map<number, { def: NutrientDefinition; value: number }>()
+    
+    // Precompute inverted index for O(1) lookup and priority check
+    const nutrientIdMap = new Map<number, { def: NutrientDefinition; priority: number }>();
+    for (const def of nutrients) {
+        def.nutritionIds.forEach((id, index) => {
+            nutrientIdMap.set(id, { def, priority: index });
+        });
+    }
+
+    const nutrientTotals = new Map<string, { def: NutrientDefinition; value: number }>()
 
     // Initialize all nutrients with 0 value
     for (const n of nutrients) {
-      nutrientTotals.set(n.nutritionId, { def: n, value: 0 })
+      nutrientTotals.set(n.type, { def: n, value: 0 })
     }
 
     for (const { ingredient, food } of results) {
       if (!food || !food.nutrients) continue
 
+      // Track best match for each nutrient type found in this food
+      const bestMatches = new Map<string, { value: number, priority: number }>();
+
       for (const n of food.nutrients) {
-        if (!nutrientTotals.has(n.nutrientId)) continue
+          const mapping = nutrientIdMap.get(n.nutrientId);
+          if (!mapping) continue;
 
-        // Calculate value based on 100g standard
-        // n.value is per 100g
-        const value = (n.value / 100) * (ingredient.amount || 0)
+          const { def, priority } = mapping;
+          const existing = bestMatches.get(def.type);
 
-        nutrientTotals.get(n.nutrientId)!.value += value
+          if (!existing || priority < existing.priority) {
+              bestMatches.set(def.type, { value: n.value, priority });
+          }
+      }
+
+      // Add best matches to totals
+      for (const [type, match] of bestMatches) {
+          const value = (match.value / 100) * (ingredient.preciseAmount || 0);
+          nutrientTotals.get(type)!.value += value;
       }
     }
 

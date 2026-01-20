@@ -16,6 +16,12 @@ class Ingredient {
 
   @Prop()
   unit?: string;
+
+  @Prop()
+  preciseAmount?: number;
+
+  @Prop()
+  preciseUnit?: string;
 }
 
 @Schema()

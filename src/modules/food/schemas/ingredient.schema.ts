@@ -1,12 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
-import { NutrientDefinition } from './nutrient-definition.schema';
 
 export type IngredientDocument = Ingredient & Document;
 
 @Schema({ _id: false })
 export class IngredientNutrient {
-  @Prop({ required: true, ref: NutrientDefinition.name })
+  @Prop({ required: true })
   nutrientId!: number;
 
   @Prop({ required: true })
@@ -26,14 +25,6 @@ export class IngredientNutrient {
 }
 
 const IngredientNutrientSchema = SchemaFactory.createForClass(IngredientNutrient);
-
-// Virtual populate configuration
-IngredientNutrientSchema.virtual('definition', {
-  ref: 'NutrientDefinition',
-  localField: 'nutrientId',
-  foreignField: 'nutritionId',
-  justOne: true,
-});
 
 @Schema({ timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } })
 export class Ingredient {

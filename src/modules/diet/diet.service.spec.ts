@@ -3,13 +3,17 @@ import { DietService } from './diet.service';
 import { FoodService } from '../food/food.service';
 import { getModelToken } from '@nestjs/mongoose';
 import { DietEntry } from './schemas/diet-entry.schema';
-import { Recipe } from '../recipe/schemas/recipe.schema';
+import { DietLimit } from './schemas/diet-limit.schema';
+import { User } from '../auth/schemas/user.schema';
+import { PUB_SUB } from '../../common/pubsub.module';
+import { AiService } from '../ai/ai.service';
+import { RecipeService } from '../recipe/recipe.service';
 
 describe('DietService', () => {
   let service: DietService;
   let foodService: FoodService;
   let dietEntryModel: any;
-  let recipeModel: any;
+  let recipeService: any;
 
   const mockFoodService = {
     foodInfo: jest.fn(),
@@ -21,8 +25,8 @@ describe('DietService', () => {
     save: jest.fn().mockResolvedValue(dto),
   }));
 
-  const mockRecipeModel = {
-    findById: jest.fn(),
+  const mockRecipeService = {
+    getRecipeById: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -38,8 +42,24 @@ describe('DietService', () => {
           useValue: mockDietEntryModel,
         },
         {
-          provide: getModelToken(Recipe.name),
-          useValue: mockRecipeModel,
+          provide: RecipeService,
+          useValue: mockRecipeService,
+        },
+        {
+          provide: getModelToken(DietLimit.name),
+          useValue: {},
+        },
+        {
+          provide: getModelToken(User.name),
+          useValue: {},
+        },
+        {
+          provide: PUB_SUB,
+          useValue: { publish: jest.fn() },
+        },
+        {
+          provide: AiService,
+          useValue: {},
         },
       ],
     }).compile();
@@ -47,7 +67,7 @@ describe('DietService', () => {
     service = module.get<DietService>(DietService);
     foodService = module.get<FoodService>(FoodService);
     dietEntryModel = module.get(getModelToken(DietEntry.name));
-    recipeModel = module.get(getModelToken(Recipe.name));
+    recipeService = module.get<RecipeService>(RecipeService);
   });
 
   afterEach(() => {
@@ -57,14 +77,14 @@ describe('DietService', () => {
   describe('logRecipeNutrition', () => {
     it('should include all nutrients with 0 value if not present in food', async () => {
       const nutrientDefs = [
-        { nutritionId: 1, name: 'Protein' },
-        { nutritionId: 2, name: 'Carbs' },
-        { nutritionId: 3, name: 'Fat' },
+        { nutritionIds: [1], name: 'Protein', type: 'protein' },
+        { nutritionIds: [2], name: 'Carbs', type: 'carbs' },
+        { nutritionIds: [3], name: 'Fat', type: 'fat' },
       ];
       
       const recipe = {
         ingredients: [
-          { name: 'Chicken', amount: 100 }
+          { name: 'Chicken', amount: 100, preciseAmount: 100 }
         ]
       };
 
@@ -75,24 +95,54 @@ describe('DietService', () => {
         ]
       };
 
-      mockRecipeModel.findById.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(recipe)
-      });
-
+      mockRecipeService.getRecipeById.mockResolvedValue(recipe);
       mockFoodService.getAllNutrientDefinitions.mockResolvedValue(nutrientDefs);
       mockFoodService.foodInfo.mockResolvedValue(foodInfo);
 
-      const result = await service.logRecipeNutrition('user1', 'recipe1', '2023-01-01', 'dinner', 'en');
+      await service.logRecipeNutrition('user1', 'recipe1', '2024-01-01', 'breakfast', 'en');
 
-      expect(result.nutritions).toHaveLength(3);
+      expect(mockDietEntryModel).toHaveBeenCalled();
+      const saveCall = mockDietEntryModel.mock.calls[0][0];
+      expect(saveCall.nutritions).toHaveLength(3);
       
-      const protein = result.nutritions.find((n: any) => n.nutritionId === 1);
-      const carbs = result.nutritions.find((n: any) => n.nutritionId === 2);
-      const fat = result.nutritions.find((n: any) => n.nutritionId === 3);
+      const protein = saveCall.nutritions.find((n: any) => n.type === 'protein');
+      const carbs = saveCall.nutritions.find((n: any) => n.type === 'carbs');
+      const fat = saveCall.nutritions.find((n: any) => n.type === 'fat');
 
-      expect(protein?.value).toBe(20); // 20 * (100/100)
-      expect(carbs?.value).toBe(0);
-      expect(fat?.value).toBe(0);
+      expect(protein.value).toBe(20);
+      expect(carbs.value).toBe(0);
+      expect(fat.value).toBe(0);
+    });
+
+    it('should respect nutritionIds priority', async () => {
+      const nutrientDefs = [
+        { nutritionIds: [10, 20], name: 'Vitamin X', type: 'vitamin_x' }, // 10 is higher priority
+      ];
+      
+      const recipe = {
+        ingredients: [
+          { name: 'SuperFood', amount: 100, preciseAmount: 100 }
+        ]
+      };
+
+      const foodInfo = {
+        name: 'SuperFood',
+        nutrients: [
+          { nutrientId: 20, value: 5 },  // Lower priority
+          { nutrientId: 10, value: 100 } // Higher priority
+        ]
+      };
+
+      mockRecipeService.getRecipeById.mockResolvedValue(recipe);
+      mockFoodService.getAllNutrientDefinitions.mockResolvedValue(nutrientDefs);
+      mockFoodService.foodInfo.mockResolvedValue(foodInfo);
+
+      await service.logRecipeNutrition('user1', 'recipe1', '2023-01-01', 'dinner', 'en');
+
+      expect(mockDietEntryModel).toHaveBeenCalled();
+      const saveCall = mockDietEntryModel.mock.calls[0][0];
+      const vitaminX = saveCall.nutritions.find((n: any) => n.type === 'vitamin_x');
+      expect(vitaminX.value).toBe(100); // Should pick value from ID 10
     });
   });
 });

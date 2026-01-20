@@ -81,6 +81,45 @@ export class AiService {
     return res.data
   }
 
+  async createEmbeddings(texts: string[]): Promise<number[][]> {
+    const model = process.env.AI_MODEL_EMBEDDING || 'text-embedding-3-small'
+    const url = `${this.base}/embeddings`
+    try {
+      const res = await axios.post(
+        url,
+        { model, input: texts, dimensions: 1024 },
+        {
+          headers: {
+            Authorization: `Bearer ${this.key}`,
+            'HTTP-Referer': 'https://mealnow.top', // Required by OpenRouter for rankings
+            'X-Title': 'MealNow', // Required by OpenRouter for rankings
+            'Content-Type': 'application/json',
+            'User-Agent': 'MealNow/1.0',
+          },
+        },
+      )
+      // Ensure the order matches the input
+      const data = res.data?.data || []
+      return data.sort((a: any, b: any) => a.index - b.index).map((item: any) => item.embedding)
+    } catch (e) {
+      this.logger.error('Failed to create embeddings', e)
+      return []
+    }
+  }
+
+  computeCosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0
+    let dot = 0
+    let normA = 0
+    let normB = 0
+    for (let i = 0; i < vecA.length; i++) {
+      dot += vecA[i] * vecB[i]
+      normA += vecA[i] * vecA[i]
+      normB += vecB[i] * vecB[i]
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB))
+  }
+
   async createEmbedding(text: string): Promise<number[]> {
     const model = process.env.AI_MODEL_EMBEDDING || 'text-embedding-3-small'
     const url = `${this.base}/embeddings`
@@ -110,7 +149,7 @@ export class AiService {
     const messages: Message[] = [
       {
         role: 'system',
-        content: 'You are a professional translator. Translate the following ingredient name to English. Only return the English name, no other text.'
+        content: 'You are a professional translator and nutrition expert. Translate the following ingredient name to English. Ensure the translation is as close as possible to the standard USDA food database terminology. Only return the English name, no other text.'
       },
       {
         role: 'user',
@@ -586,6 +625,36 @@ export class AiService {
   //     return { totalCalories: 0, nutritionInfo: [] }
   //   }
   // }
+
+  async convertUnitToGrams(name: string, amount: number, unit: string): Promise<number> {
+    const model = process.env.AI_MODEL_CONVERSION || 'openai/gpt-4o-mini'
+    const messages: Message[] = [
+      {
+        role: 'system',
+        content: 'You are a culinary expert. Convert the following ingredient amount to grams. Return ONLY the number representing the amount in grams.\nIf the unit is a non-standard measure or a count (e.g., "piece", "slice", "whole", "root", "clove", "cup", "spoon", "bowl", etc.), estimate the weight in grams based on the typical average size of the ingredient.\nIf the conversion depends on density/size and is approximate, provide your best professional estimate.\nDo not return any units, explanation, or other text, just the raw number.'
+      },
+      {
+        role: 'user',
+        content: `Convert ${amount} ${unit} of ${name} to grams.`
+      }
+    ]
+    
+    try {
+        const data = await this.chat(model, messages)
+        const content = data?.choices?.[0]?.message?.content?.trim()
+        // Remove any non-numeric characters except dot (in case AI returns "100g" or similar despite instructions)
+        const numericStr = content?.replace(/[^0-9.]/g, '')
+        const result = parseFloat(numericStr)
+        if (isNaN(result)) {
+             this.logger.warn(`Failed to convert ${amount} ${unit} of ${name} to grams: AI returned '${content}'`);
+             return amount; // Fallback to original amount
+        }
+        return result;
+    } catch (e) {
+        this.logger.error(`Failed to convert ${amount} ${unit} of ${name} to grams`, e);
+        return amount;
+    }
+  }
 
   async calculateMissingIngredients(
     recipeIngredients: { name: string; amount: number; unit: string }[],

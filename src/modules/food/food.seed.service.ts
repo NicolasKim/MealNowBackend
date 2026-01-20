@@ -9,7 +9,7 @@ export class FoodSeedService implements OnModuleInit {
 
   private readonly NUTRIENT_DEFINITIONS: Array<Partial<NutrientDefinition>> = [
     {
-      nutritionId: 1008,
+      nutritionIds: [1008],
       type: 'energy',
       category: 'energy',
       categoryName: { zh: '热量', en: 'Energy' },
@@ -20,7 +20,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 2000
     },
     {
-      nutritionId: 1085,
+      nutritionIds: [1085],
       type: 'fat',
       category: 'macronutrients',
       categoryName: { zh: '宏量营养素', en: 'Macronutrients' },
@@ -31,7 +31,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 78
     },
     {
-      nutritionId: 1050,
+      nutritionIds: [1050,1005],
       type: 'carbohydrate',
       category: 'macronutrients',
       categoryName: { zh: '宏量营养素', en: 'Macronutrients' },
@@ -42,7 +42,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 275
     },
     {
-      nutritionId: 1003,
+      nutritionIds: [1003],
       type: 'protein',
       category: 'macronutrients',
       categoryName: { zh: '宏量营养素', en: 'Macronutrients' },
@@ -53,7 +53,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 50
     },
     {
-      nutritionId: 1079,
+      nutritionIds: [1079],
       type: 'dietary_fiber',
       category: 'macronutrients',
       categoryName: { zh: '宏量营养素', en: 'Macronutrients' },
@@ -65,7 +65,7 @@ export class FoodSeedService implements OnModuleInit {
     },
 
     {
-      nutritionId: 1106,
+      nutritionIds: [1106],
       type: 'vitamin_a',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -76,7 +76,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 900
     },
     {
-      nutritionId: 1165,
+      nutritionIds: [1165],
       type: 'vitamin_b1',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -87,7 +87,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1.2
     },
     {
-      nutritionId: 1166,
+      nutritionIds: [1166],
       type: 'vitamin_b2',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -98,7 +98,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1.3
     },
     {
-      nutritionId: 1167,
+      nutritionIds: [1167],
       type: 'vitamin_b3',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -109,7 +109,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 16
     },
     {
-      nutritionId: 1170,
+      nutritionIds: [1170],
       type: 'vitamin_b5',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -120,7 +120,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1.2 //TODO
     },
     {
-      nutritionId: 1175,
+      nutritionIds: [1175],
       type: 'vitamin_b6',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -131,7 +131,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1.7
     },
     {
-      nutritionId: 1177,
+      nutritionIds: [1177],
       type: 'vitamin_b9',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -142,7 +142,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 400
     },
     {
-      nutritionId: 1178,
+      nutritionIds: [1178],
       type: 'vitamin_b12',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -153,7 +153,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 2.4
     },
     {
-      nutritionId: 1162,
+      nutritionIds: [1162],
       type: 'vitamin_c',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -164,7 +164,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 90
     },
     {
-      nutritionId: 1109,
+      nutritionIds: [1109],
       type: 'vitamin_e',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -175,7 +175,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 15
     },
     {
-      nutritionId: 1184,
+      nutritionIds: [1184],
       type: 'vitamin_k',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -186,7 +186,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 120
     },
     {
-      nutritionId: 1114,
+      nutritionIds: [1114],
       type: 'vitamin_d',
       category: 'vitamins',
       categoryName: { zh: '维生素', en: 'Vitamins' },
@@ -197,7 +197,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 20
     },
     {
-      nutritionId: 1087,
+      nutritionIds: [1087],
       type: 'calcium',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -208,7 +208,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1300
     },
     {
-      nutritionId: 1092,
+      nutritionIds: [1092],
       type: 'potassium',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -219,7 +219,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 4700
     },
     {
-      nutritionId: 1095,
+      nutritionIds: [1095],
       type: 'zinc',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -230,7 +230,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 11
     },
     {
-      nutritionId: 1103,
+      nutritionIds: [1103],
       type: 'selenium',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -241,7 +241,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 55
     },
     {
-      nutritionId: 1089,
+      nutritionIds: [1089],
       type: 'iron',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -252,7 +252,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 18
     },
     {
-      nutritionId: 1090,
+      nutritionIds: [1090],
       type: 'magnesium',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -263,7 +263,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 420
     },
     {
-      nutritionId: 1091,
+      nutritionIds: [1091],
       type: 'phosphorus',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -274,7 +274,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 1250
     },
     {
-      nutritionId: 1093,
+      nutritionIds: [1093],
       type: 'sodium',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -285,7 +285,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 2300
     },
     {
-      nutritionId: 1098,
+      nutritionIds: [1098],
       type: 'copper',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },
@@ -296,7 +296,7 @@ export class FoodSeedService implements OnModuleInit {
       dailyValue: 0.9
     },
     {
-      nutritionId: 1101,
+      nutritionIds: [1101],
       type: 'manganese',
       category: 'minerals',
       categoryName: { zh: '矿物质', en: 'Minerals' },

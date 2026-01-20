@@ -161,7 +161,8 @@ type DietEntry {
 }
 
 type NutrientDefinition {
-  nutritionId: Int!
+  nutritionIds: [Int!]!
+  type: String!
   name: JSON!
   unit: String!
   dailyValue: Float!
@@ -173,7 +174,7 @@ type DietMealStatus {
 }
 
 type NutrientLimit {
-  nutritionId: Int!
+  type: String!
   min: Float!
   max: Float!
   unit: String
@@ -187,7 +188,7 @@ type DietLimit {
 }
 
 type DietGenerationProgress {
-  nutrient: Int
+  nutrient: String
   status: String!
   message: String
   step: Int

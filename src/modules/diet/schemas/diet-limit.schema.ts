@@ -7,8 +7,8 @@ export type DietLimitDocument = DietLimit & Document;
 
 @Schema({ _id: false })
 export class NutrientLimit {
-    @Prop({ required: true, ref: 'NutrientDefinition', type: Number })
-    nutritionId!: number;
+    @Prop({ required: true, ref: 'NutrientDefinition', type: String })
+    type!: string;
 
     @Prop({ required: true })
     min!: number;

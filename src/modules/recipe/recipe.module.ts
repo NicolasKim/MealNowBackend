@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose'
 import { RecipeResolver } from './recipe.resolver'
 import { UserRecipeResolver } from './user-recipe.resolver'
 import { RecipeSchedulerService } from './recipe.scheduler'
+import { RecipeService } from './recipe.service'
 import { AiModule } from '../ai/ai.module'
 import { PantryModule } from '../pantry/pantry.module'
 import { StorageModule } from '../storage/storage.module'
@@ -25,6 +26,7 @@ import { Recipe, RecipeSchema } from './schemas/recipe.schema'
       { name: Recipe.name, schema: RecipeSchema }
     ])
   ], 
-  providers: [RecipeResolver, UserRecipeResolver, RecipeSchedulerService] 
+  providers: [RecipeResolver, UserRecipeResolver, RecipeSchedulerService, RecipeService],
+  exports: [RecipeService]
 })
 export class RecipeModule {}

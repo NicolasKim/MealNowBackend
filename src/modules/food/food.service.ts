@@ -29,7 +29,7 @@ export class FoodService {
         const embedding = await this.aiService.createEmbedding(name);
         if (embedding.length > 0) {
             // Lower threshold slightly for cross-lingual matches if needed, but 0.85 is usually fine for OpenAI embeddings
-            const matches = await this.aiService.queryVectors(embedding, 1, 0.82);
+            const matches = await this.aiService.queryVectors(embedding, 1, 0.6);
             if (matches.length > 0) {
                 this.logger.debug(`Vector match found for '${name}': ${matches[0].metadata?.name}`);
                 
@@ -111,18 +111,18 @@ export class FoodService {
     return this.nutrientDefinitionModel.find().sort({ categoryOrder: 1, typeOrder: 1 }).lean().exec();
   }
 
-  private async getValidNutrientIds(): Promise<Set<number>> {
-    const cacheKey = 'food:valid_nutrient_ids';
+  private async getValidNutrientTypes(): Promise<Set<string>> {
+    const cacheKey = 'food:valid_nutrient_types';
     const cached = await this.redisService.get().get(cacheKey);
     if (cached) {
         return new Set(JSON.parse(cached));
     }
 
-    const nutrients = await this.nutrientDefinitionModel.find().select('nutritionId').lean().exec();
-    const ids = nutrients.map(n => n.nutritionId);
+    const nutrients = await this.nutrientDefinitionModel.find().select('type').lean().exec();
+    const types = nutrients.map(n => n.type);
     
-    await this.redisService.get().setex(cacheKey, 3600, JSON.stringify(ids));
-    return new Set(ids);
+    await this.redisService.get().setex(cacheKey, 3600, JSON.stringify(types));
+    return new Set(types);
   }
 
   private async searchUsda(query: string): Promise<StandardizedIngredient> {
@@ -137,7 +137,7 @@ export class FoodService {
             {
                 query: query,
                 dataType: ['Foundation'],
-                pageSize: 1,
+                pageSize: 10,
                 pageNumber: 1
             }
         );
@@ -145,22 +145,54 @@ export class FoodService {
         const foods = response.data.foods;
         
         if (foods && foods.length > 0) {
-            const food = foods[0];
-            const validIds = await this.getValidNutrientIds();
-            
-            const nutrients: FoodNutrient[] = (food.foodNutrients || []).map((n: any) => {
-                // Handle SR Legacy / Survey (flat structure)
-                if (n.nutrientId !== undefined && validIds.has(n.nutrientId)) {
-                    return {
-                        nutrientId: n.nutrientId, //这是最重要的
-                        nutrientName: n.nutrientName,
-                        nutrientNumber: n.nutrientNumber,
-                        unitName: n.unitName,
-                        value: n.value,
-                    };
+            let food = foods[0];
+
+            // If there are multiple results, select the one most similar to the query via vector comparison
+            if (foods.length > 1) {
+                try {
+                    this.logger.debug(`Comparing ${foods.length} USDA results for query '${query}'...`);
+                    // Create embeddings for query and all candidate descriptions in one batch
+                    const candidates = foods.map((f: any) => f.description);
+                    const allTexts = [query, ...candidates];
+                    const allEmbeddings = await this.aiService.createEmbeddings(allTexts);
+
+                    if (allEmbeddings.length === allTexts.length) {
+                        const queryEmbedding = allEmbeddings[0];
+                        const candidateEmbeddings = allEmbeddings.slice(1);
+
+                        let maxScore = -1;
+                        let bestIndex = 0;
+
+                        for (let i = 0; i < candidateEmbeddings.length; i++) {
+                            const score = this.aiService.computeCosineSimilarity(queryEmbedding, candidateEmbeddings[i]);
+                            // this.logger.debug(`Candidate ${i}: ${candidates[i]} - Score: ${score}`);
+                            if (score > maxScore) {
+                                maxScore = score;
+                                bestIndex = i;
+                            }
+                        }
+
+                        if (bestIndex !== 0) {
+                             this.logger.log(`Vector comparison selected index ${bestIndex}: '${foods[bestIndex].description}' (score: ${maxScore.toFixed(4)}) over default '${foods[0].description}'`);
+                        } else {
+                             this.logger.debug(`Vector comparison confirmed first result is best match (score: ${maxScore.toFixed(4)})`);
+                        }
+                        food = foods[bestIndex];
+                    }
+                } catch (error) {
+                    this.logger.warn(`Vector comparison failed, falling back to first result: ${error}`);
                 }
-                return null;
-            }).filter((n: any) => n !== null);
+            }
+
+            const nutrients: FoodNutrient[] = (food.foodNutrients || []).map((n: any) => {
+                return {
+                    nutrientId: n.nutrientId, //这是最重要的
+                    nutrientName: n.nutrientName,
+                    nutrientNumber: n.nutrientNumber,
+                    unitName: n.unitName,
+                    value: n.value,
+                };
+            });
 
             // Parse description and translate
             const description = food.description;

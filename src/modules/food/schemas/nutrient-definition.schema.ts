@@ -7,8 +7,8 @@ export type LocalizedText = Record<string, string>
 
 @Schema({ timestamps: true })
 export class NutrientDefinition {
-  @Prop({ required: true, unique: true, index: true })
-  nutritionId!: number
+  @Prop({ required: true, type: [Number], index: true })
+  nutritionIds!: number[]
 
   @Prop({ required: true, unique: true, index: true })
   type!: string
