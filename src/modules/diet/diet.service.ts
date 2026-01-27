@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common'
+import { Injectable, NotFoundException, Inject, ForbiddenException } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { RedisPubSub } from 'graphql-redis-subscriptions'
@@ -7,6 +7,7 @@ import { AiService } from '../ai/ai.service'
 import { RedisService } from '../redis/redis.service'
 import { Recipe } from '../recipe/schemas/recipe.schema'
 import { RecipeService } from '../recipe/recipe.service'
+import { BillingService } from '../billing/billing.service'
 import { DietEntry, DietEntryDocument, DietNutritionItem } from './schemas/diet-entry.schema'
 import { DietLimit, DietLimitDocument } from './schemas/diet-limit.schema'
 import { User, UserDocument } from '../auth/schemas/user.schema'
@@ -19,6 +20,7 @@ export class DietService {
   constructor(
     @InjectModel(DietEntry.name) private readonly dietEntryModel: Model<DietEntryDocument>,
     private readonly recipeService: RecipeService,
+    private readonly billingService: BillingService,
     @InjectModel(DietLimit.name) private readonly dietLimitModel: Model<DietLimitDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @Inject(PUB_SUB) private readonly pubSub: RedisPubSub,
@@ -194,10 +196,18 @@ export class DietService {
       }
     }
 
-    // Load limits if userId is provided
+    // Load limits and subscription status if userId is provided
     let userLimits = new Map<string, { min: number; max: number }>();
+    let hasSubscription = false;
+
     if (userId) {
-        const limits = await this.dietLimitModel.findOne({ user: userId }).lean().exec();
+        const [limits, isActive] = await Promise.all([
+            this.dietLimitModel.findOne({ user: userId }).lean().exec(),
+            this.billingService.hasActiveSubscription(userId)
+        ]);
+
+        hasSubscription = isActive;
+
         if (limits && limits.limits) {
             limits.limits.forEach(l => {
                 userLimits.set(l.type, { min: l.min, max: l.max });
@@ -205,7 +215,7 @@ export class DietService {
         }
     }
 
-    const nutritions = Array.from(nutrientTotals.values()).map(({ def, value }) => {
+    let nutritions = Array.from(nutrientTotals.values()).map(({ def, value }) => {
       const limit = userLimits.get(def.type);
       return {
         ...def,
@@ -214,6 +224,11 @@ export class DietService {
         max: limit?.max
       };
     })
+
+    // Filter for non-subscribers (only Energy and Macronutrients)
+    if (!hasSubscription) {
+        nutritions = nutritions.filter(n => n.category === 'energy' || n.category === 'macronutrients');
+    }
 
     // Sort by category and type order
     nutritions.sort((a, b) => {
@@ -268,7 +283,6 @@ export class DietService {
     mealType: string,
     lang: string,
   ): Promise<DietEntryDocument> {
-
 
     const recipe = await this.recipeService.getRecipeById(recipeId)
     let ingredients = recipe.ingredients || []

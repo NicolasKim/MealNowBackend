@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module'
 import { AiModule } from '../ai/ai.module'
 import { RedisModule } from '../redis/redis.module'
 import { RecipeModule } from '../recipe/recipe.module'
+import { BillingModule } from '../billing/billing.module'
 import { DietResolver } from './diet.resolver'
 import { DietService } from './diet.service'
 import { DietEntry, DietEntrySchema } from './schemas/diet-entry.schema'
@@ -26,7 +27,8 @@ import { PubSubModule } from '../../common/pubsub.module'
     RedisModule,
     FoodModule,
     PubSubModule,
-    RecipeModule
+    RecipeModule,
+    BillingModule
   ],
   providers: [DietResolver, DietService],
 })

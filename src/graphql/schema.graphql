@@ -280,7 +280,6 @@ type Query {
   tastePreferenceOptions: [TastePreferenceOption!]!
   usageHistory(limit: Int, offset: Int): [UsageRecord!]!
   myRecipes(limit: Int, offset: Int): [Recipe!]!
-  subscriptionPlans: [SubscriptionPlan!]!
   hello: String
   myTasks: [Task!]!
   dietEntries(dateFrom: String!, dateTo: String!): [DietEntry!]!
@@ -319,8 +318,7 @@ type Mutation {
   generateRecipes(input: GenerateRecipeInput!, count: Int!): TaskResponse!
   generateSurpriseRecipes(count: Int!, mealType: String, excludedDishes: [String!]): TaskResponse!
   addMissingToCart(recipeId: ID!): Cart!
-
-  verifyAppStoreReceipt(receiptData: String!): Boolean!
+  
   consumeTrial: Boolean!
 
   completeOnboarding(tastePreferences: [String!]!): User!

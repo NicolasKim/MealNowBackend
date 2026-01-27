@@ -189,7 +189,7 @@ export class RecipeSchedulerService {
 
   async generateForUser(user: UserDocument, mealType: string, isScheduled: boolean = false, langOverride?: string) {
     const userId = user._id.toString();
-    const isSubscribed = await this.billingService.hasActiveSubscription(userId);
+    const isSubscribed = await this.billingService.hasActiveSubscriptionOrInTrial(userId);
     const lang = langOverride || user.language || 'en';
 
     // For non-subscribed users, return public recommendations

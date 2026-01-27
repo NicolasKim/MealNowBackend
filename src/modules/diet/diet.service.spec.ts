@@ -8,12 +8,15 @@ import { User } from '../auth/schemas/user.schema';
 import { PUB_SUB } from '../../common/pubsub.module';
 import { AiService } from '../ai/ai.service';
 import { RecipeService } from '../recipe/recipe.service';
+import { BillingService } from '../billing/billing.service';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('DietService', () => {
   let service: DietService;
   let foodService: FoodService;
   let dietEntryModel: any;
   let recipeService: any;
+  let billingService: any;
 
   const mockFoodService = {
     foodInfo: jest.fn(),
@@ -27,6 +30,10 @@ describe('DietService', () => {
 
   const mockRecipeService = {
     getRecipeById: jest.fn(),
+  };
+
+  const mockBillingService = {
+    hasActiveSubscription: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -44,6 +51,10 @@ describe('DietService', () => {
         {
           provide: RecipeService,
           useValue: mockRecipeService,
+        },
+        {
+          provide: BillingService,
+          useValue: mockBillingService,
         },
         {
           provide: getModelToken(DietLimit.name),
@@ -68,6 +79,7 @@ describe('DietService', () => {
     foodService = module.get<FoodService>(FoodService);
     dietEntryModel = module.get(getModelToken(DietEntry.name));
     recipeService = module.get<RecipeService>(RecipeService);
+    billingService = module.get<BillingService>(BillingService);
   });
 
   afterEach(() => {
@@ -75,7 +87,16 @@ describe('DietService', () => {
   });
 
   describe('logRecipeNutrition', () => {
+    it('should throw ForbiddenException if user has no active subscription', async () => {
+      mockBillingService.hasActiveSubscription.mockResolvedValue(false);
+      
+      await expect(
+        service.logRecipeNutrition('user1', 'recipe1', '2024-01-01', 'breakfast', 'en')
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('should include all nutrients with 0 value if not present in food', async () => {
+      mockBillingService.hasActiveSubscription.mockResolvedValue(true);
       const nutrientDefs = [
         { nutritionIds: [1], name: 'Protein', type: 'protein' },
         { nutritionIds: [2], name: 'Carbs', type: 'carbs' },
@@ -115,6 +136,7 @@ describe('DietService', () => {
     });
 
     it('should respect nutritionIds priority', async () => {
+      mockBillingService.hasActiveSubscription.mockResolvedValue(true);
       const nutrientDefs = [
         { nutritionIds: [10, 20], name: 'Vitamin X', type: 'vitamin_x' }, // 10 is higher priority
       ];

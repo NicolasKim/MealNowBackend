@@ -5,6 +5,7 @@ import { I18nService } from 'nestjs-i18n'
 import { Subscription, SubscriptionDocument } from './schemas/subscription.schema'
 import { UsageRecord, UsageRecordDocument } from './schemas/usage-record.schema'
 
+import { PREMIUM_PLAN_SKUS, ALL_PREMIUM_PLANS } from '../../common/constants/subscription.constants'
 import { QuotaExceededError } from '../../common/errors/quota-exceeded.error'
 
 @Injectable()
@@ -99,17 +100,27 @@ export class BillingService {
 
     const now = new Date()
 
-    const premiumPlans = [
-      'com.mealnow.premium.monthly',
-      'com.mealnow.premium.quarterly',
-      'com.mealnow.premium.yearly'
-    ]
+    const premiumPlans = PREMIUM_PLAN_SKUS
 
     if (sub.status === 'active' && premiumPlans.includes(sub.plan)) {
       if (!sub.endAt || new Date(sub.endAt) > now) {
         return true
       }
     }
+
+    return false
+  }
+
+  async hasActiveSubscriptionOrInTrial(userId: string): Promise<boolean> {
+
+    const isActive = await this.hasActiveSubscription(userId)
+    if (!isActive) return false
+
+    const now = new Date()
+
+    
+    const sub = await this.subscriptions.findOne({ userId }).lean()
+    if (!sub) return false
 
     if (
       sub.status === 'active' &&
@@ -124,16 +135,10 @@ export class BillingService {
   }
 
   async findAllActiveSubscriberIds(): Promise<string[]> {
-    const premiumPlans = [
-      'monthly', 'quarterly', 'yearly',
-      'com.mealnow.premium.monthly',
-      'com.mealnow.premium.quarterly',
-      'com.mealnow.premium.yearly'
-    ];
+    const premiumPlans = ALL_PREMIUM_PLANS
+    const now = new Date()
 
-    const now = new Date();
-
-    const subs = await this.subscriptions.find({
+    const activeSubs = await this.subscriptions.find({
       status: 'active',
       plan: { $in: premiumPlans },
       $or: [
@@ -142,7 +147,7 @@ export class BillingService {
       ]
     }).select('userId').lean()
 
-    return subs.map(sub => sub.userId)
+    return activeSubs.map(sub => sub.userId)
   }
 
   async findAllActiveTrialUserIds(): Promise<string[]> {
@@ -239,11 +244,7 @@ export class BillingService {
     }
 
     // 2. Check Subscription (Paid Membership)
-    const premiumPlans = [
-      'com.mealnow.premium.monthly',
-      'com.mealnow.premium.quarterly',
-      'com.mealnow.premium.yearly'
-    ];
+    const premiumPlans = PREMIUM_PLAN_SKUS;
     if (sub && sub.status === 'active' && premiumPlans.includes(sub.plan)) {
       const now = new Date()
       if (!sub.endAt || new Date(sub.endAt) > now) {
